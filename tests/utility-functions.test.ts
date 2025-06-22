@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { extractPatterns, cartesianProduct, generatePermutations } from "../actions/generate-domains"
+import { extractPatterns, cartesianProduct, generatePermutations } from "../lib/domain-utils"
 
 describe("Utility Functions", () => {
   describe("extractPatterns", () => {

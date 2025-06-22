@@ -5,26 +5,12 @@ import { createOpenRouter } from "@openrouter/ai-sdk-provider"
 import { z } from "zod"
 import validator from "validator"
 import whois from "freewhois"
+import { extractPatterns, generatePermutations } from "@/lib/domain-utils"
 
 const openrouter = createOpenRouter({
   apiKey: "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",
 })
 
-export function extractPatterns(input: string): { pattern: string; startIndex: number; endIndex: number }[] {
-  const patterns: { pattern: string; startIndex: number; endIndex: number }[] = []
-  const regex = /\{\{([^{}]*)\}\}/g
-  let match
-
-  while ((match = regex.exec(input)) !== null) {
-    patterns.push({
-      pattern: match[1],
-      startIndex: match.index,
-      endIndex: match.index + match[0].length,
-    })
-  }
-
-  return patterns
-}
 
 async function generateOptionsForPattern(pattern: string): Promise<string[]> {
   // Handle simple slash patterns first
@@ -64,50 +50,7 @@ async function generateOptionsForPattern(pattern: string): Promise<string[]> {
   }
 }
 
-export function cartesianProduct<T>(...arrays: T[][]): T[][] {
-  return arrays.reduce<T[][]>(
-    (acc, curr) => {
-      const result: T[][] = []
-      for (const accItem of acc) {
-        for (const currItem of curr) {
-          result.push([...accItem, currItem])
-        }
-      }
-      return result
-    },
-    [[]],
-  )
-}
 
-export function generatePermutations(
-  template: string,
-  patternResults: { startIndex: number; endIndex: number; options: string[] }[],
-): string[] {
-  if (patternResults.length === 0) {
-    return [template]
-  }
-
-  const sortedPatterns = [...patternResults].sort((a, b) => a.startIndex - b.startIndex)
-  const optionArrays = sortedPatterns.map((p) => p.options)
-  const combinations = cartesianProduct(...optionArrays)
-
-  return combinations.map((combination) => {
-    let result = template
-    let offset = 0
-
-    sortedPatterns.forEach((pattern, index) => {
-      const replacement = combination[index]
-      const adjustedStart = pattern.startIndex + offset
-      const adjustedEnd = pattern.endIndex + offset
-      const originalLength = adjustedEnd - adjustedStart
-
-      result = result.slice(0, adjustedStart) + replacement + result.slice(adjustedEnd)
-      offset += replacement.length - originalLength
-    })
-
-    return result
-  })
-}
 
 async function checkDomainAvailability(domain: string): Promise<boolean> {
   try {
@@ -122,11 +65,17 @@ async function checkDomainAvailability(domain: string): Promise<boolean> {
 
     // If no ldhName in response, consider it available
     return true
-  } catch (error: any) {
+  } catch (error) {
     console.error(`Error checking domain availability for ${domain}:`, error)
     // If error status is 404, domain is available
-    if (error.status === 404 || error.response?.status === 404) {
+    if (error instanceof Error && 'status' in error && error.status === 404) {
       return true
+    }
+    if (error instanceof Error && 'response' in error) {
+      const errorWithResponse = error as Error & { response?: { status?: number } }
+      if (errorWithResponse.response?.status === 404) {
+        return true
+      }
     }
     // For other errors, assume domain might be taken (conservative approach)
     return true
