@@ -1,10 +1,16 @@
 "use client"
 
-import { useState, useEffect, Suspense } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { generateDomains, type DomainSearchResult } from "./actions/generate-domains"
-import { CheckCircle } from "lucide-react"
+import { CheckCircle, XCircle, Loader2 } from "lucide-react"
+import { extractPatterns } from "@/lib/patterns"
+
+interface DomainResult {
+  domain: string
+  isAvailable: boolean | null // null means checking
+  isNewBatch?: boolean // marks domains from "Try More"
+}
 
 function validateDomainPattern(pattern: string): { isValid: boolean; error: string | null } {
   if (!pattern.trim()) {
@@ -51,119 +57,337 @@ function validateDomainPattern(pattern: string): { isValid: boolean; error: stri
 }
 
 function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: boolean }) {
-  const [isLoading, setIsLoading] = useState(false)
-  const [visibleCount, setVisibleCount] = useState(20)
-  const [searchResult, setSearchResult] = useState<DomainSearchResult>({
-    domains: [],
-    totalChecked: 0,
-    availableCount: 0,
-  })
+  const [domains, setDomains] = useState<DomainResult[]>([])
+  const [isExpanding, setIsExpanding] = useState(false)
+  const [isChecking, setIsChecking] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [visibleCount, setVisibleCount] = useState(20)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const checkingRef = useRef<Set<string>>(new Set())
+  const abortControllerRef = useRef<AbortController | null>(null)
+  const checkAbortControllersRef = useRef<Map<string, AbortController>>(new Map())
+
+  // Check domain availability
+  const checkDomain = async (domain: string) => {
+    if (checkingRef.current.has(domain)) return
+    
+    // Create abort controller for this specific check
+    const abortController = new AbortController()
+    checkAbortControllersRef.current.set(domain, abortController)
+    checkingRef.current.add(domain)
+    
+    try {
+      const response = await fetch('/api/domains/check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain }),
+        signal: abortController.signal
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        setDomains(prev => 
+          prev.map(d => d.domain === domain ? { ...d, isAvailable: data.isAvailable } : d)
+        )
+      }
+    } catch (error: any) {
+      if (error.name !== 'AbortError') {
+        console.error(`Error checking ${domain}:`, error)
+      }
+    } finally {
+      checkingRef.current.delete(domain)
+      checkAbortControllersRef.current.delete(domain)
+    }
+  }
+
+  // Abort all ongoing domain checks
+  const abortAllChecks = () => {
+    // Abort individual domain checks
+    checkAbortControllersRef.current.forEach((controller, domain) => {
+      controller.abort()
+    })
+    checkAbortControllersRef.current.clear()
+    checkingRef.current.clear()
+    
+    // Abort the main expand operation
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+  }
 
   useEffect(() => {
+    // Abort all ongoing checks when search term changes
+    abortAllChecks()
+    
     if (!searchTerm.trim() || !isValid) {
-      setSearchResult({ domains: [], totalChecked: 0, availableCount: 0 })
+      setDomains([])
+      setIsChecking(false)
+      setIsExpanding(false)
       return
     }
 
-    const generateDomainsAsync = async () => {
-      setIsLoading(true)
+    abortControllerRef.current = new AbortController()
+
+    const expandDomains = async () => {
+      setIsExpanding(true)
       setError(null)
-      setVisibleCount(20)
+      setDomains([])
+      checkingRef.current.clear()
 
       try {
-        const result = await generateDomains(searchTerm)
-        setSearchResult(result)
-      } catch (err) {
-        setError("Failed to generate domains. Please try again.")
-        setSearchResult({ domains: [], totalChecked: 0, availableCount: 0 })
-      } finally {
-        setIsLoading(false)
+        const response = await fetch('/api/domains/expand', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pattern: searchTerm }),
+          signal: abortControllerRef.current?.signal
+        })
+
+        if (!response.ok) {
+          throw new Error('Failed to expand domains')
+        }
+
+        const data = await response.json()
+        const domainResults: DomainResult[] = data.domains.map((domain: string) => ({
+          domain,
+          isAvailable: null
+        }))
+        
+        setDomains(domainResults)
+        setIsExpanding(false)
+        
+        // Start checking domains in batches
+        if (domainResults.length > 0) {
+          setIsChecking(true)
+          
+          // Group by TLD for better rate limiting
+          const porkbunDomains = domainResults.filter(d => {
+            const tld = d.domain.split('.').pop() || ''
+            return ['dev', 'app', 'page', 'gay', 'foo', 'zip', 'mov'].includes(tld)
+          })
+          
+          const otherDomains = domainResults.filter(d => !porkbunDomains.some(p => p.domain === d.domain))
+          
+          // Check non-Porkbun domains in parallel batches
+          const batchSize = 5
+          for (let i = 0; i < otherDomains.length; i += batchSize) {
+            const batch = otherDomains.slice(i, i + batchSize)
+            await Promise.all(batch.map(d => checkDomain(d.domain)))
+          }
+          
+          // Check Porkbun domains sequentially
+          for (const d of porkbunDomains) {
+            await checkDomain(d.domain)
+          }
+          
+          setIsChecking(false)
+        }
+      } catch (error: any) {
+        if (error.name !== 'AbortError') {
+          setError("Failed to generate domains. Please try again.")
+          console.error('Error:', error)
+        }
+        setIsExpanding(false)
+        setIsChecking(false)
       }
     }
 
-    const timer = setTimeout(generateDomainsAsync, 500)
-    return () => clearTimeout(timer)
+    const timer = setTimeout(expandDomains, 500)
+    return () => {
+      clearTimeout(timer)
+      abortAllChecks()
+    }
   }, [searchTerm, isValid])
 
-  const visibleDomains = searchResult.domains.slice(0, visibleCount)
-  const hasMore = visibleCount < searchResult.domains.length
+  // Load more domains based on unavailable ones
+  const loadMoreDomains = async () => {
+    setIsLoadingMore(true)
+    setError(null)
+    
+    // Create a new abort controller for this operation
+    const loadMoreAbortController = new AbortController()
+    
+    try {
+      // Get all unavailable domains
+      const unavailableDomains = domains
+        .filter(d => d.isAvailable === false)
+        .map(d => d.domain)
+      
+      if (unavailableDomains.length === 0) {
+        setError("No unavailable domains to base suggestions on")
+        setIsLoadingMore(false)
+        return
+      }
+      
+      const response = await fetch('/api/domains/expand-more', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          pattern: searchTerm,
+          unavailableDomains 
+        }),
+        signal: loadMoreAbortController.signal
+      })
+      
+      if (!response.ok) {
+        throw new Error('Failed to generate more suggestions')
+      }
+      
+      const data = await response.json()
+      const newDomainResults: DomainResult[] = data.domains.map((domain: string) => ({
+        domain,
+        isAvailable: null,
+        isNewBatch: true
+      }))
+      
+      // Add new domains to the list
+      setDomains(prev => [...prev, ...newDomainResults])
+      
+      // Start checking the new domains
+      if (newDomainResults.length > 0) {
+        setIsChecking(true)
+        
+        // Group by TLD for better rate limiting
+        const porkbunDomains = newDomainResults.filter(d => {
+          const tld = d.domain.split('.').pop() || ''
+          return ['dev', 'app', 'page', 'gay', 'foo', 'zip', 'mov'].includes(tld)
+        })
+        
+        const otherDomains = newDomainResults.filter(d => !porkbunDomains.some(p => p.domain === d.domain))
+        
+        // Check non-Porkbun domains in parallel batches
+        const batchSize = 5
+        for (let i = 0; i < otherDomains.length; i += batchSize) {
+          const batch = otherDomains.slice(i, i + batchSize)
+          await Promise.all(batch.map(d => checkDomain(d.domain)))
+        }
+        
+        // Check Porkbun domains sequentially
+        for (const d of porkbunDomains) {
+          await checkDomain(d.domain)
+        }
+        
+        setIsChecking(false)
+      }
+    } catch (error: any) {
+      if (error.name !== 'AbortError') {
+        console.error('Error loading more domains:', error)
+        setError("Failed to generate more suggestions. Please try again.")
+      }
+    } finally {
+      setIsLoadingMore(false)
+    }
+  }
+
+  const visibleDomains = domains.slice(0, visibleCount)
+  const hasMore = visibleCount < domains.length
+  const checkedCount = domains.filter(d => d.isAvailable !== null).length
+  const availableCount = domains.filter(d => d.isAvailable === true).length
+  const unavailableCount = domains.filter(d => d.isAvailable === false).length
 
   if (!searchTerm.trim() || !isValid) return null
 
-  if (isLoading) {
+  if (isExpanding) {
     return (
       <div className="space-y-1">
         {Array.from({ length: 8 }).map((_, index) => (
           <div key={index} className="px-4 py-2 bg-gray-100 rounded-md animate-pulse">
-            <div className="h-5 bg-gray-200 rounded w-3/4"></div>
+            <div className="h-4 bg-gray-200 rounded w-3/4"></div>
           </div>
         ))}
-        <div className="text-center text-sm text-gray-500 mt-4">Generating domains and checking availability...</div>
+        <div className="text-center text-sm text-gray-400 mt-4 font-light">Generating domains...</div>
       </div>
     )
   }
 
   if (error) {
-    return <div className="text-center text-red-500 text-sm py-4">{error}</div>
+    return <div className="text-center text-red-500 text-sm py-4 font-light">{error}</div>
   }
 
-  // Show search statistics
-  if (searchResult.totalChecked === 0) {
-    return <div className="text-center text-gray-500 text-sm py-4">No domains generated. Try a different pattern.</div>
-  }
-
-  if (searchResult.availableCount === 0) {
-    return (
-      <div className="text-center text-gray-500 text-sm py-4">
-        No available domains found. Checked {searchResult.totalChecked} domain
-        {searchResult.totalChecked !== 1 ? "s" : ""}.
-      </div>
-    )
+  if (domains.length === 0) {
+    return <div className="text-center text-gray-400 text-sm py-4 font-light">No domains generated. Try a different pattern.</div>
   }
 
   return (
     <div className="space-y-4">
       <div className="space-y-1">
-        {visibleDomains.map((item, index) => (
-          <div
-            key={index}
-            className="px-4 py-2 text-gray-700 hover:bg-gray-50 rounded-md cursor-pointer transition-colors duration-150 border border-transparent hover:border-gray-200 flex items-center justify-between"
-            onClick={() => navigator.clipboard.writeText(item.domain)}
-            title="Click to copy"
-          >
-            <span>{item.domain}</span>
-            <div className="flex items-center gap-1 text-green-600">
-              <CheckCircle className="w-4 h-4" />
-              <span className="text-xs">Available</span>
+        {visibleDomains.map((item, index) => {
+          // Check if this is the first item from a new batch
+          const isFirstNewBatch = item.isNewBatch && 
+            (index === 0 || !visibleDomains[index - 1].isNewBatch)
+          
+          return (
+            <div key={index}>
+              {isFirstNewBatch && index > 0 && (
+                <div className="flex items-center gap-3 py-3">
+                  <div className="flex-1 h-px bg-gray-200"></div>
+                  <span className="text-xs text-gray-400 font-light">New suggestions</span>
+                  <div className="flex-1 h-px bg-gray-200"></div>
+                </div>
+              )}
+              <div
+                className="px-4 py-2.5 text-gray-600 hover:bg-gray-50 rounded-md cursor-pointer transition-colors duration-150 border border-transparent hover:border-gray-200 flex items-center justify-between font-light"
+                onClick={() => navigator.clipboard.writeText(item.domain)}
+                title="Click to copy"
+              >
+            <span className={item.isAvailable === false ? 'text-gray-400' : 'text-gray-700'}>{item.domain}</span>
+            {item.isAvailable === null ? (
+              <div className="flex items-center gap-1 text-gray-400">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span className="text-xs font-normal">Checking...</span>
+              </div>
+            ) : item.isAvailable ? (
+              <div className="flex items-center gap-1 text-green-600">
+                <CheckCircle className="w-4 h-4" />
+                <span className="text-xs font-normal">Available</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1 text-red-500">
+                <XCircle className="w-4 h-4" />
+                <span className="text-xs font-normal">Taken</span>
+              </div>
+            )}
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
-      {hasMore && (
+      {hasMore && domains.length - visibleCount > 100 && (
         <div className="flex justify-center pt-2">
-          <Button variant="outline" onClick={() => setVisibleCount((prev) => prev + 20)} className="text-sm">
-            Load More ({searchResult.domains.length - visibleCount} remaining)
+          <Button variant="outline" onClick={() => setVisibleCount((prev) => prev + 20)} className="text-sm font-light">
+            Load More ({domains.length - visibleCount} remaining)
           </Button>
         </div>
       )}
 
-      <div className="text-center text-sm text-gray-600 pt-2">
-        {searchResult.availableCount} available out of {searchResult.totalChecked} searched
+      <div className="text-center text-sm text-gray-500 pt-2 font-light">
+        {availableCount} available out of {checkedCount} checked
+        {isChecking && (
+          <span className="ml-2">
+            <span className="inline-block animate-pulse">•</span> Still checking...
+          </span>
+        )}
       </div>
-    </div>
-  )
-}
 
-function LoadingFallback() {
-  return (
-    <div className="space-y-1">
-      {Array.from({ length: 8 }).map((_, index) => (
-        <div key={index} className="px-4 py-2 bg-gray-100 rounded-md animate-pulse">
-          <div className="h-5 bg-gray-200 rounded w-3/4"></div>
+      {/* Try More button - show when we have unavailable domains and pattern has patterns */}
+      {unavailableCount > 0 && extractPatterns(searchTerm).length > 0 && !isLoadingMore && !isChecking && (
+        <div className="flex justify-center pt-6">
+          <Button 
+            onClick={loadMoreDomains}
+            className="font-light"
+            variant="default"
+          >
+            Try More Suggestions
+          </Button>
         </div>
-      ))}
+      )}
+
+      {isLoadingMore && (
+        <div className="text-center text-sm text-gray-500 pt-4 font-light">
+          <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
+          Generating more suggestions based on unavailable domains...
+        </div>
+      )}
     </div>
   )
 }
@@ -175,62 +399,46 @@ export default function DomainGenerator() {
     error: null,
   })
 
-  useEffect(() => {
-    const result = validateDomainPattern(searchTerm)
-    setValidation(result)
-  }, [searchTerm])
-
   const examplePatterns = [
     { label: "{{get/set}}something.com", value: "{{get/set}}something.com" },
     { label: "{{use/try}}myapp.{{com/io}}", value: "{{use/try}}myapp.{{com/io}}" },
     { label: "{{one dictionary word}}.io", value: "{{one dictionary word}}.io" },
   ]
 
+  const validateAndSetSearchTerm = (pattern: string) => {
+    const result = validateDomainPattern(pattern)
+    setValidation(result)
+    setSearchTerm(pattern)
+  }
+
   return (
-    <div className="min-h-screen bg-white flex items-start justify-center pt-32">
-      <div className="w-full max-w-md space-y-6">
-        <div className="text-center space-y-2">
-          <h1 className="text-2xl font-light text-gray-900">AI Domain Generator</h1>
-          <p className="text-sm text-gray-500">
-            Use patterns like {"{get/use}"}myapp.{"{com/io}"}
-          </p>
-        </div>
-
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Input
-              type="text"
-              placeholder="e.g. {'{one dictionary word}'}.io"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className={`w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent ${
-                validation.isValid ? "border-gray-200 focus:ring-gray-900" : "border-red-500 focus:ring-red-500"
-              }`}
-            />
-            {validation.error && <div className="text-red-500 text-sm px-1">{validation.error}</div>}
-          </div>
-
-          <div className="space-y-2">
-            <p className="text-xs text-gray-500 px-1">Try these examples:</p>
-            <div className="flex flex-wrap gap-2">
-              {examplePatterns.map((example, index) => (
-                <button
-                  key={index}
-                  onClick={() => setSearchTerm(example.value)}
-                  className="text-xs px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors duration-150 border border-gray-200 cursor-pointer"
-                  title={`Click to use: ${example.value}`}
-                >
-                  {example.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <Suspense fallback={<LoadingFallback />}>
-            <DomainList searchTerm={searchTerm} isValid={validation.isValid} />
-          </Suspense>
-        </div>
+    <div className="max-w-2xl mx-auto space-y-4">
+      <div className="space-y-2">
+        <Input
+          type="text"
+          value={searchTerm}
+          onChange={(e) => validateAndSetSearchTerm(e.target.value)}
+          placeholder="Enter domain pattern: example.com or {{get/use}}app.{{com/io}}"
+          className={`w-full font-light ${validation.error ? "border-red-500" : ""}`}
+        />
+        {validation.error && <p className="text-sm text-red-500 font-light">{validation.error}</p>}
       </div>
+
+      <div className="flex gap-2 flex-wrap">
+        {examplePatterns.map((example, index) => (
+          <Button
+            key={index}
+            variant="outline"
+            size="sm"
+            onClick={() => validateAndSetSearchTerm(example.value)}
+            className="text-xs cursor-pointer font-light"
+          >
+            {example.label}
+          </Button>
+        ))}
+      </div>
+
+      <DomainList searchTerm={searchTerm} isValid={validation.isValid} />
     </div>
   )
 }

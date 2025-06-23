@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { extractPatterns, cartesianProduct, generatePermutations } from "../lib/domain-utils"
+import { extractPatterns, cartesianProduct, generatePermutations } from "../lib/patterns"
 
 describe("Utility Functions", () => {
   describe("extractPatterns", () => {
@@ -37,13 +37,7 @@ describe("Utility Functions", () => {
 
     it("should handle empty patterns", () => {
       const result = extractPatterns("{{}}app.com")
-      expect(result).toEqual([
-        {
-          pattern: "",
-          startIndex: 0,
-          endIndex: 4,
-        },
-      ])
+      expect(result).toEqual([])  // Empty patterns are now filtered out
     })
 
     it("should handle patterns with spaces", () => {

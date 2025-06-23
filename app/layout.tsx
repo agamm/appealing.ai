@@ -15,6 +15,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Appealing.ai - Domain Name Generator",
   description: "Find the perfect domain name with AI-powered pattern generation",
+  icons: {
+    icon: '/icon.svg',
+  },
 };
 
 export default function RootLayout({
