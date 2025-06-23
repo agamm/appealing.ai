@@ -126,13 +126,30 @@ export async function generateDomains(pattern: string, excludedDomains: string[]
       .filter((domain, index, arr) => arr.indexOf(domain) === index)
       .filter((domain) => !excludedDomains.includes(domain)) // Exclude previously tried domains
 
-    // Check availability for each domain
-    const domainsWithAvailability = await Promise.all(
-      validDomains.map(async (domain) => {
+    // Check availability for each domain with concurrency limit for Porkbun domains
+    const domainsWithAvailability: Array<{ domain: string; isAvailable: boolean }> = []
+    
+    // Group domains by TLD to handle Porkbun rate limiting
+    const porkbunDomains = validDomains.filter(domain => {
+      const tld = domain.split('.').pop() || ''
+      return ['dev', 'app', 'page', 'gay', 'foo', 'zip', 'mov'].includes(tld)
+    })
+    const otherDomains = validDomains.filter(domain => !porkbunDomains.includes(domain))
+    
+    // Check non-Porkbun domains in parallel
+    const otherResults = await Promise.all(
+      otherDomains.map(async (domain) => {
         const isAvailable = await checkDomainAvailability(domain)
         return { domain, isAvailable }
-      }),
+      })
     )
+    domainsWithAvailability.push(...otherResults)
+    
+    // Check Porkbun domains sequentially (they'll be rate-limited internally)
+    for (const domain of porkbunDomains) {
+      const isAvailable = await checkDomainAvailability(domain)
+      domainsWithAvailability.push({ domain, isAvailable })
+    }
 
     // Filter to only return available domains
     const availableDomains = domainsWithAvailability.filter((domain) => domain.isAvailable)

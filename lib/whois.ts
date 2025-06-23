@@ -27,6 +27,15 @@ const PORKBUN_ONLY_TLDS = new Set([
 // Cache for RDAP servers
 let rdapServers: Array<[string[], string[]]> | null = null
 
+// Rate limiting for Porkbun API
+const porkbunRateLimit = {
+  lastCheck: 0,
+  minInterval: 10000, // 10 seconds minimum between checks
+  queue: [] as Array<{domain: string, resolve: (value: boolean) => void, reject: (error: unknown) => void}>
+}
+
+let porkbunQueueProcessor: NodeJS.Timeout | null = null
+
 // Promisified whois lookup
 const whoisLookupAsync = promisify(whoisLookup) as (domain: string) => Promise<string>
 
@@ -75,14 +84,45 @@ function isAvailableWhoisResponse(response: string): boolean {
   return availablePatterns.some(pattern => lowerResponse.includes(pattern))
 }
 
-async function checkPorkbun(domain: string): Promise<boolean> {
+async function processPorkbunQueue() {
+  if (porkbunRateLimit.queue.length === 0) {
+    porkbunQueueProcessor = null
+    return
+  }
+  
+  const now = Date.now()
+  const timeSinceLastCheck = now - porkbunRateLimit.lastCheck
+  
+  if (timeSinceLastCheck < porkbunRateLimit.minInterval) {
+    // Wait before processing next request
+    const waitTime = porkbunRateLimit.minInterval - timeSinceLastCheck
+    console.log(`Rate limiting: waiting ${waitTime}ms before next Porkbun check`)
+    porkbunQueueProcessor = setTimeout(processPorkbunQueue, waitTime)
+    return
+  }
+  
+  const { domain, resolve, reject } = porkbunRateLimit.queue.shift()!
+  porkbunRateLimit.lastCheck = now
+  
+  try {
+    const result = await checkPorkbunDirect(domain)
+    resolve(result)
+  } catch (error) {
+    reject(error)
+  }
+  
+  // Process next item in queue
+  if (porkbunRateLimit.queue.length > 0) {
+    porkbunQueueProcessor = setTimeout(processPorkbunQueue, 100)
+  }
+}
+
+async function checkPorkbunDirect(domain: string): Promise<boolean> {
   const apiKey = process.env.PORKBUN_API_KEY
   const secretKey = process.env.PORKBUN_SECRET_KEY
   
   if (!apiKey || !secretKey) {
     console.error('Porkbun API credentials not found in environment variables')
-    console.error('PORKBUN_API_KEY exists:', !!process.env.PORKBUN_API_KEY)
-    console.error('PORKBUN_SECRET_KEY exists:', !!process.env.PORKBUN_SECRET_KEY)
     throw new Error('Porkbun API credentials missing')
   }
   
@@ -101,11 +141,16 @@ async function checkPorkbun(domain: string): Promise<boolean> {
       }
     })
     
-    // Log the response for debugging
-    console.log(`Porkbun response for ${domain}:`, JSON.stringify(data, null, 2))
+    // Check rate limit info
+    if (data.limits) {
+      console.log(`Porkbun rate limit: ${data.limits.naturalLanguage}`)
+      // Adjust rate limit if needed based on response
+      if (data.limits.TTL) {
+        porkbunRateLimit.minInterval = parseInt(data.limits.TTL) * 1000
+      }
+    }
     
     // Check if the response indicates availability
-    // According to Porkbun docs, available domains have status "SUCCESS" and available "yes"
     if (data.status === 'SUCCESS' && data.response?.avail === 'yes') {
       console.log(`Domain ${domain} is available via Porkbun`)
       return true
@@ -120,11 +165,27 @@ async function checkPorkbun(domain: string): Promise<boolean> {
         data: error.response?.data,
         message: error.message
       })
+      
+      // If rate limited, adjust interval
+      if (error.response?.status === 429) {
+        porkbunRateLimit.minInterval = 30000 // 30 seconds on rate limit
+        console.log('Porkbun rate limit hit, increasing interval to 30s')
+      }
     } else {
       console.error(`Porkbun API error for ${domain}:`, error)
     }
     throw error
   }
+}
+
+async function checkPorkbun(domain: string): Promise<boolean> {
+  return new Promise((resolve, reject) => {
+    porkbunRateLimit.queue.push({ domain, resolve, reject })
+    
+    if (!porkbunQueueProcessor) {
+      processPorkbunQueue()
+    }
+  })
 }
 
 // Main functions
