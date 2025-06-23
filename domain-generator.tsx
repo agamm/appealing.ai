@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { CheckCircle, XCircle, Loader2 } from "lucide-react"
+import { CheckCircle, XCircle, Loader2, Sparkles } from "lucide-react"
 import { extractPatterns } from "@/lib/patterns"
 
 interface DomainResult {
@@ -61,14 +61,14 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
   const [isExpanding, setIsExpanding] = useState(false)
   const [isChecking, setIsChecking] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [visibleCount, setVisibleCount] = useState(20)
+  const [visibleCount, setVisibleCount] = useState(100)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const checkingRef = useRef<Set<string>>(new Set())
   const abortControllerRef = useRef<AbortController | null>(null)
   const checkAbortControllersRef = useRef<Map<string, AbortController>>(new Map())
 
   // Check domain availability
-  const checkDomain = async (domain: string) => {
+  const checkDomain = useCallback(async (domain: string) => {
     if (checkingRef.current.has(domain)) return
     
     // Create abort controller for this specific check
@@ -98,7 +98,7 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
       checkingRef.current.delete(domain)
       checkAbortControllersRef.current.delete(domain)
     }
-  }
+  }, [])
 
   // Abort all ongoing domain checks
   const abortAllChecks = () => {
@@ -154,33 +154,6 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
         
         setDomains(domainResults)
         setIsExpanding(false)
-        
-        // Start checking domains in batches
-        if (domainResults.length > 0) {
-          setIsChecking(true)
-          
-          // Group by TLD for better rate limiting
-          const porkbunDomains = domainResults.filter(d => {
-            const tld = d.domain.split('.').pop() || ''
-            return ['dev', 'app', 'page', 'gay', 'foo', 'zip', 'mov'].includes(tld)
-          })
-          
-          const otherDomains = domainResults.filter(d => !porkbunDomains.some(p => p.domain === d.domain))
-          
-          // Check non-Porkbun domains in parallel batches
-          const batchSize = 5
-          for (let i = 0; i < otherDomains.length; i += batchSize) {
-            const batch = otherDomains.slice(i, i + batchSize)
-            await Promise.all(batch.map(d => checkDomain(d.domain)))
-          }
-          
-          // Check Porkbun domains sequentially
-          for (const d of porkbunDomains) {
-            await checkDomain(d.domain)
-          }
-          
-          setIsChecking(false)
-        }
       } catch (error: any) {
         if (error.name !== 'AbortError') {
           setError("Failed to generate domains. Please try again.")
@@ -197,6 +170,55 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
       abortAllChecks()
     }
   }, [searchTerm, isValid])
+
+  // Check domains as they become visible
+  useEffect(() => {
+    const checkVisibleDomains = async () => {
+      const visibleDomains = domains.slice(0, visibleCount)
+      const uncheckedVisibleDomains = visibleDomains.filter(d => 
+        d.isAvailable === null && !checkingRef.current.has(d.domain)
+      )
+      
+      if (uncheckedVisibleDomains.length === 0) {
+        // Update checking state if no domains left to check
+        if (checkingRef.current.size === 0) {
+          setIsChecking(false)
+        }
+        return
+      }
+      
+      setIsChecking(true)
+      
+      try {
+        // Group by TLD for better rate limiting
+        const porkbunDomains = uncheckedVisibleDomains.filter(d => {
+          const tld = d.domain.split('.').pop() || ''
+          return ['dev', 'app', 'page', 'gay', 'foo', 'zip', 'mov'].includes(tld)
+        })
+        
+        const otherDomains = uncheckedVisibleDomains.filter(d => !porkbunDomains.some(p => p.domain === d.domain))
+        
+        // Check non-Porkbun domains in parallel batches
+        const batchSize = 5
+        for (let i = 0; i < otherDomains.length; i += batchSize) {
+          const batch = otherDomains.slice(i, i + batchSize)
+          await Promise.all(batch.map(d => checkDomain(d.domain)))
+        }
+        
+        // Check Porkbun domains sequentially
+        for (const d of porkbunDomains) {
+          await checkDomain(d.domain)
+        }
+      } finally {
+        // Ensure checking state is updated
+        if (checkingRef.current.size === 0) {
+          setIsChecking(false)
+        }
+      }
+    }
+    
+    checkVisibleDomains()
+  }, [visibleCount, domains.length, checkDomain])
 
   // Load more domains based on unavailable ones
   const loadMoreDomains = async () => {
@@ -241,33 +263,6 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
       
       // Add new domains to the list
       setDomains(prev => [...prev, ...newDomainResults])
-      
-      // Start checking the new domains
-      if (newDomainResults.length > 0) {
-        setIsChecking(true)
-        
-        // Group by TLD for better rate limiting
-        const porkbunDomains = newDomainResults.filter(d => {
-          const tld = d.domain.split('.').pop() || ''
-          return ['dev', 'app', 'page', 'gay', 'foo', 'zip', 'mov'].includes(tld)
-        })
-        
-        const otherDomains = newDomainResults.filter(d => !porkbunDomains.some(p => p.domain === d.domain))
-        
-        // Check non-Porkbun domains in parallel batches
-        const batchSize = 5
-        for (let i = 0; i < otherDomains.length; i += batchSize) {
-          const batch = otherDomains.slice(i, i + batchSize)
-          await Promise.all(batch.map(d => checkDomain(d.domain)))
-        }
-        
-        // Check Porkbun domains sequentially
-        for (const d of porkbunDomains) {
-          await checkDomain(d.domain)
-        }
-        
-        setIsChecking(false)
-      }
     } catch (error: any) {
       if (error.name !== 'AbortError') {
         console.error('Error loading more domains:', error)
@@ -352,9 +347,9 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
         })}
       </div>
 
-      {hasMore && domains.length - visibleCount > 100 && (
+      {hasMore && (
         <div className="flex justify-center pt-2">
-          <Button variant="outline" onClick={() => setVisibleCount((prev) => prev + 20)} className="text-sm font-light">
+          <Button variant="outline" onClick={() => setVisibleCount((prev) => Math.min(prev + 20, domains.length))} className="text-sm font-light">
             Load More ({domains.length - visibleCount} remaining)
           </Button>
         </div>
@@ -369,14 +364,15 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
         )}
       </div>
 
-      {/* Try More button - show when we have unavailable domains and pattern has patterns */}
-      {unavailableCount > 0 && extractPatterns(searchTerm).length > 0 && !isLoadingMore && !isChecking && (
+      {/* Try More button - show when we have unavailable domains, pattern has patterns, and all domains are visible */}
+      {unavailableCount > 0 && extractPatterns(searchTerm).length > 0 && !isLoadingMore && !isChecking && !hasMore && (
         <div className="flex justify-center pt-6">
           <Button 
             onClick={loadMoreDomains}
             className="font-light"
             variant="default"
           >
+            <Sparkles className="w-3.5 h-3.5 mr-1.5 opacity-70" />
             Try More Suggestions
           </Button>
         </div>
