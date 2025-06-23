@@ -135,14 +135,21 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
     }
   }, [])
 
-  // Add scroll listener to update unseen domains position
+  // Add throttled scroll listener to update unseen domains position
   useEffect(() => {
+    let scrollTimeout: NodeJS.Timeout
     const handleScroll = () => {
-      setScrollTrigger(prev => prev + 1)
+      clearTimeout(scrollTimeout)
+      scrollTimeout = setTimeout(() => {
+        setScrollTrigger(prev => prev + 1)
+      }, 100) // Throttle to every 100ms
     }
 
-    window.addEventListener('scroll', handleScroll)
-    return () => window.removeEventListener('scroll', handleScroll)
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => {
+      clearTimeout(scrollTimeout)
+      window.removeEventListener('scroll', handleScroll)
+    }
   }, [])
 
   // Calculate unseen available domains
