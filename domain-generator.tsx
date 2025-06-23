@@ -283,41 +283,43 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
 
   if (isExpanding) {
     return (
-      <div className="space-y-4">
-        <div className="space-y-1.5">
-          {Array.from({ length: 5 }).map((_, index) => (
-            <div 
-              key={index} 
-              className="fade-in"
-              style={{ animationDelay: `${index * 0.1}s` }}
-            >
-              <div className="px-4 py-2.5 rounded-md border border-gray-100 bg-white overflow-hidden">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div 
-                      className="h-4 rounded shimmer" 
-                      style={{ 
-                        width: `${Math.random() * 60 + 100}px`,
-                      }}
-                    ></div>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-2 h-2 bg-gray-200 rounded-full animate-pulse"></div>
-                    <div className="w-2 h-2 bg-gray-200 rounded-full animate-pulse" style={{ animationDelay: '0.3s' }}></div>
-                    <div className="w-2 h-2 bg-gray-200 rounded-full animate-pulse" style={{ animationDelay: '0.6s' }}></div>
+      <div className="mt-4">
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            {Array.from({ length: 5 }).map((_, index) => (
+              <div 
+                key={index} 
+                className="fade-in"
+                style={{ animationDelay: `${index * 0.1}s` }}
+              >
+                <div className="px-4 py-2.5 rounded-md border border-gray-100 bg-white overflow-hidden">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div 
+                        className="h-4 rounded shimmer" 
+                        style={{ 
+                          width: `${Math.random() * 60 + 100}px`,
+                        }}
+                      ></div>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2 h-2 bg-gray-200 rounded-full animate-pulse"></div>
+                      <div className="w-2 h-2 bg-gray-200 rounded-full animate-pulse" style={{ animationDelay: '0.3s' }}></div>
+                      <div className="w-2 h-2 bg-gray-200 rounded-full animate-pulse" style={{ animationDelay: '0.6s' }}></div>
+                    </div>
                   </div>
                 </div>
               </div>
+            ))}
+          </div>
+          <div className="text-center pt-2">
+            <div className="inline-flex items-center gap-2 text-sm text-gray-500 font-light">
+              <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeOpacity="0.25"></circle>
+                <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"></path>
+              </svg>
+              <span>Generating domains...</span>
             </div>
-          ))}
-        </div>
-        <div className="text-center pt-2">
-          <div className="inline-flex items-center gap-2 text-sm text-gray-500 font-light">
-            <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
-              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeOpacity="0.25"></circle>
-              <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"></path>
-            </svg>
-            <span>Generating domains...</span>
           </div>
         </div>
       </div>
