@@ -10,6 +10,8 @@ import { DomainResult } from "@/components/domain-result"
 import { useRateLimit } from "@/hooks/use-rate-limit"
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer"
 import { UnseenDomainsIndicator } from "@/components/unseen-domains-indicator"
+import { useDebounce } from "@/hooks/use-debounce"
+import { RATE_LIMITS } from "@/lib/rate-limit"
 
 interface DomainResultData {
   domain: string
@@ -66,7 +68,7 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
   const [isExpanding, setIsExpanding] = useState(false)
   const [isChecking, setIsChecking] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [visibleCount, setVisibleCount] = useState(100)
+  const [visibleCount, setVisibleCount] = useState(RATE_LIMITS.INITIAL_VISIBLE_DOMAINS)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [currentSearchId, setCurrentSearchId] = useState<string | null>(null)
   const [tryMoreLimitReached, setTryMoreLimitReached] = useState(false)
@@ -78,6 +80,9 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
   const checkAbortControllersRef = useRef<Map<string, AbortController>>(new Map())
   const domainRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const { entries, observe, unobserve } = useIntersectionObserver({ threshold: 0.5 })
+  
+  // Debounce the search term
+  const debouncedSearchTerm = useDebounce(searchTerm, RATE_LIMITS.SEARCH_DEBOUNCE_DELAY)
   
   const { 
     checkDailySearchLimit, 
@@ -142,7 +147,7 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
       clearTimeout(scrollTimeout)
       scrollTimeout = setTimeout(() => {
         setScrollTrigger(prev => prev + 1)
-      }, 100) // Throttle to every 100ms
+      }, RATE_LIMITS.SCROLL_THROTTLE_DELAY)
     }
 
     window.addEventListener('scroll', handleScroll, { passive: true })
@@ -238,7 +243,7 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
     // Abort all ongoing checks when search term changes
     abortAllChecks()
     
-    if (!searchTerm.trim() || !isValid) {
+    if (!debouncedSearchTerm.trim() || !isValid) {
       setDomains([])
       setIsChecking(false)
       setIsExpanding(false)
@@ -262,7 +267,7 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
       setError(null)
       setDomains([])
       setTryMoreLimitReached(false)
-      setTryMoreRemaining(2) // Reset to initial limit
+      setTryMoreRemaining(RATE_LIMITS.TRY_MORE_PER_SEARCH) // Reset to initial limit
       checkingRef.current.clear()
       setSeenAvailableDomains(new Set())
       
@@ -276,7 +281,7 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
           headers: { 
           'Content-Type': 'application/json'
         },
-          body: JSON.stringify({ pattern: searchTerm }),
+          body: JSON.stringify({ pattern: debouncedSearchTerm }),
           signal: abortControllerRef.current?.signal
         })
 
@@ -305,12 +310,12 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
       }
     }
 
-    const timer = setTimeout(expandDomains, 300)
+    expandDomains()
+    
     return () => {
-      clearTimeout(timer)
       abortAllChecks()
     }
-  }, [searchTerm, isValid])
+  }, [debouncedSearchTerm, isValid, checkDailySearchLimit, incrementDailySearches])
 
   // Monitor try more limit for current search
   useEffect(() => {
@@ -342,24 +347,11 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
       setIsChecking(true)
       
       try {
-        // Group by TLD for better rate limiting
-        const porkbunDomains = uncheckedVisibleDomains.filter(d => {
-          const tld = d.domain.split('.').pop() || ''
-          return ['dev', 'app', 'page', 'gay', 'foo', 'zip', 'mov'].includes(tld)
-        })
-        
-        const otherDomains = uncheckedVisibleDomains.filter(d => !porkbunDomains.some(p => p.domain === d.domain))
-        
-        // Check non-Porkbun domains in parallel batches
-        const batchSize = 5
-        for (let i = 0; i < otherDomains.length; i += batchSize) {
-          const batch = otherDomains.slice(i, i + batchSize)
+        // Check all domains in parallel batches
+        const batchSize = RATE_LIMITS.DOMAIN_CHECK_BATCH_SIZE
+        for (let i = 0; i < uncheckedVisibleDomains.length; i += batchSize) {
+          const batch = uncheckedVisibleDomains.slice(i, i + batchSize)
           await Promise.all(batch.map(d => checkDomain(d.domain)))
-        }
-        
-        // Check Porkbun domains sequentially
-        for (const d of porkbunDomains) {
-          await checkDomain(d.domain)
         }
       } finally {
         // Ensure checking state is updated
@@ -455,7 +447,7 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
   const checkedCount = domains.filter(d => d.isAvailable !== null).length
   const availableCount = domains.filter(d => d.isAvailable === true).length
 
-  if (!searchTerm.trim() || !isValid) return null
+  if (!debouncedSearchTerm.trim() || !isValid) return null
 
   if (isExpanding) {
     return (
@@ -542,7 +534,7 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
 
       {hasMore && (
         <div className="flex justify-center pt-2">
-          <Button variant="outline" onClick={() => setVisibleCount((prev) => Math.min(prev + 20, domains.length))} className="text-sm font-light">
+          <Button variant="outline" onClick={() => setVisibleCount((prev) => Math.min(prev + RATE_LIMITS.LOAD_MORE_INCREMENT, domains.length))} className="text-sm font-light">
             Load More ({domains.length - visibleCount} remaining)
           </Button>
         </div>
