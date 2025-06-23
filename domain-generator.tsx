@@ -399,8 +399,8 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
         )}
       </div>
 
-      {/* Try More button - show when we have unavailable domains, pattern has patterns, and all domains are visible */}
-      {unavailableCount > 0 && extractPatterns(searchTerm).length > 0 && !isLoadingMore && !isChecking && !hasMore && (
+      {/* Try More button - show when we have patterns and all domains are visible */}
+      {domains.length > 0 && extractPatterns(searchTerm).length > 0 && !isLoadingMore && !isChecking && !hasMore && (
         <div className="flex justify-center pt-6">
           <Button 
             onClick={loadMoreDomains}
