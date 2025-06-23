@@ -8,7 +8,7 @@ interface RateLimitData {
 }
 
 const STORAGE_KEY = 'appealing-rate-limits'
-const DAILY_SEARCH_LIMIT = 5
+const DAILY_SEARCH_LIMIT = 6
 const TRY_MORE_PER_SEARCH_LIMIT = 2
 const DAY_IN_MS = 24 * 60 * 60 * 1000
 

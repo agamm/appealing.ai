@@ -2,12 +2,14 @@
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
-import { CheckCircle, XCircle, Loader2, Sparkles } from "lucide-react"
+import { Loader2, Sparkles } from "lucide-react"
 import { extractPatterns } from "@/lib/patterns"
 import { HighlightedInput } from "@/components/highlighted-input"
+import { ExamplePatterns } from "@/components/example-patterns"
+import { DomainResult } from "@/components/domain-result"
 import { useRateLimit } from "@/hooks/use-rate-limit"
 
-interface DomainResult {
+interface DomainResultData {
   domain: string
   isAvailable: boolean | null // null means checking
   isNewBatch?: boolean // marks domains from "Try More"
@@ -58,7 +60,7 @@ function validateDomainPattern(pattern: string): { isValid: boolean; error: stri
 }
 
 function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: boolean }) {
-  const [domains, setDomains] = useState<DomainResult[]>([])
+  const [domains, setDomains] = useState<DomainResultData[]>([])
   const [isExpanding, setIsExpanding] = useState(false)
   const [isChecking, setIsChecking] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -177,7 +179,7 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
         }
 
         const data = await response.json()
-        const domainResults: DomainResult[] = data.domains.map((domain: string) => ({
+        const domainResults: DomainResultData[] = data.domains.map((domain: string) => ({
           domain,
           isAvailable: null
         }))
@@ -203,6 +205,17 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
       abortAllChecks()
     }
   }, [searchTerm, isValid])
+
+  // Monitor try more limit for current search
+  useEffect(() => {
+    if (currentSearchId) {
+      const { allowed, remaining } = checkTryMoreLimit(currentSearchId)
+      setTryMoreRemaining(remaining)
+      if (!allowed) {
+        setTryMoreLimitReached(true)
+      }
+    }
+  }, [currentSearchId, domains.length, checkTryMoreLimit])
 
   // Check domains as they become visible
   useEffect(() => {
@@ -313,7 +326,7 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
       }
       
       const data = await response.json()
-      const newDomainResults: DomainResult[] = data.domains.map((domain: string) => ({
+      const newDomainResults: DomainResultData[] = data.domains.map((domain: string) => ({
         domain,
         isAvailable: null,
         isNewBatch: true
@@ -335,7 +348,6 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
   const hasMore = visibleCount < domains.length
   const checkedCount = domains.filter(d => d.isAvailable !== null).length
   const availableCount = domains.filter(d => d.isAvailable === true).length
-  const unavailableCount = domains.filter(d => d.isAvailable === false).length
 
   if (!searchTerm.trim() || !isValid) return null
 
@@ -396,54 +408,17 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
     <div className="space-y-4">
       <div className="space-y-1">
         {visibleDomains.map((item, index) => {
-          // Check if this is the first item from a new batch
           const isFirstNewBatch = item.isNewBatch && 
             (index === 0 || !visibleDomains[index - 1].isNewBatch)
           
           return (
-            <div key={index}>
-              {isFirstNewBatch && index > 0 && (
-                <div className="flex items-center gap-3 py-3">
-                  <div className="flex-1 h-px bg-gray-200"></div>
-                  <span className="text-xs text-gray-400 font-light">New suggestions</span>
-                  <div className="flex-1 h-px bg-gray-200"></div>
-                </div>
-              )}
-              <div
-                className="px-4 py-2.5 text-gray-600 hover:bg-gray-50 rounded-md cursor-pointer transition-colors duration-150 border border-transparent hover:border-gray-200 flex items-center justify-between font-light"
-                onClick={() => {
-                  if (item.isAvailable === false) {
-                    // Open domain in new tab if taken
-                    window.open(`https://${item.domain}`, '_blank')
-                  } else {
-                    // Copy to clipboard if available
-                    navigator.clipboard.writeText(item.domain)
-                  }
-                }}
-                title={item.isAvailable === false ? "Click to visit" : "Click to copy"}
-              >
-            <span className={item.isAvailable === false ? 'text-gray-400 underline' : 'text-gray-700'}>{item.domain}</span>
-            {item.isAvailable === null ? (
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1">
-                  <div className="w-1 h-1 bg-gray-400 rounded-full loading-dot"></div>
-                  <div className="w-1 h-1 bg-gray-400 rounded-full loading-dot" style={{ animationDelay: '0.2s' }}></div>
-                  <div className="w-1 h-1 bg-gray-400 rounded-full loading-dot" style={{ animationDelay: '0.4s' }}></div>
-                </div>
-              </div>
-            ) : item.isAvailable ? (
-              <div className="flex items-center gap-1 text-green-600">
-                <CheckCircle className="w-4 h-4" />
-                <span className="text-xs font-normal">Available</span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-1 text-red-500">
-                <XCircle className="w-4 h-4" />
-                <span className="text-xs font-normal">Taken</span>
-              </div>
-            )}
-              </div>
-            </div>
+            <DomainResult
+              key={index}
+              domain={item.domain}
+              isAvailable={item.isAvailable}
+              isFirstNewBatch={isFirstNewBatch}
+              showNewBatchDivider={index > 0}
+            />
           )
         })}
       </div>
@@ -531,17 +506,10 @@ export default function DomainGenerator() {
         {validation.error && <p className="text-sm text-red-500 font-light">{validation.error}</p>}
       </div>
 
-      <div className="flex gap-4 flex-wrap">
-        {examplePatterns.map((example, index) => (
-          <button
-            key={index}
-            onClick={() => validateAndSetSearchTerm(example.value)}
-            className="text-xs font-light text-gray-600 underline hover:text-gray-900 transition-colors cursor-pointer"
-          >
-            {example.label}
-          </button>
-        ))}
-      </div>
+      <ExamplePatterns 
+        patterns={examplePatterns}
+        onSelect={validateAndSetSearchTerm}
+      />
 
       <DomainList searchTerm={searchTerm} isValid={validation.isValid} />
       
