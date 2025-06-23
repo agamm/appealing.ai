@@ -13,7 +13,7 @@ const openrouter = createOpenRouter({
 })
 
 
-async function generateOptionsForPattern(pattern: string): Promise<string[]> {
+async function generateOptionsForPattern(pattern: string, excludedOptions: string[] = []): Promise<string[]> {
   // Handle simple slash patterns first
   if (pattern.includes("/") && !pattern.includes("with") && !pattern.includes("without")) {
     return pattern
@@ -34,8 +34,9 @@ async function generateOptionsForPattern(pattern: string): Promise<string[]> {
 - When pattern asks for "words similar to <word>" return words similar to <word> but also <word>.
 - When pattern asks for "words like <word>" don't return "<word>like" or "<word>dup"...
 - Return max 50 options
-- Unless constrained by pattern, return at least 5 options`,
-      prompt: `Generate options for the following pattern: ${pattern}`,
+- Unless constrained by pattern, return at least 5 options
+${excludedOptions.length > 0 ? `- DO NOT generate these options that were already tried: ${excludedOptions.join(', ')}` : ''}`,
+      prompt: `Generate options for the following pattern: ${pattern}${excludedOptions.length > 0 ? `\n\nDO NOT generate these options: ${excludedOptions.join(', ')}` : ''}`,
       temperature: 0.7,
       schema: z.object({
         options: z.array(z.string()),
@@ -84,7 +85,7 @@ export interface DomainSearchResult {
   availableCount: number
 }
 
-export async function generateDomains(pattern: string): Promise<DomainSearchResult> {
+export async function generateDomains(pattern: string, excludedDomains: string[] = []): Promise<DomainSearchResult> {
   try {
     const patterns = extractPatterns(pattern)
 
@@ -103,7 +104,7 @@ export async function generateDomains(pattern: string): Promise<DomainSearchResu
 
     const patternResults = []
     for (const p of patterns) {
-      const options = await generateOptionsForPattern(p.pattern)
+      const options = await generateOptionsForPattern(p.pattern, [])
       patternResults.push({
         startIndex: p.startIndex,
         endIndex: p.endIndex,
@@ -123,7 +124,7 @@ export async function generateDomains(pattern: string): Promise<DomainSearchResu
       .map((domain) => domain.toLowerCase())
       .filter((domain) => validator.isFQDN(domain, { require_tld: true }))
       .filter((domain, index, arr) => arr.indexOf(domain) === index)
-      // .slice(0, 50) // Reduced limit for availability checking
+      .filter((domain) => !excludedDomains.includes(domain)) // Exclude previously tried domains
 
     // Check availability for each domain
     const domainsWithAvailability = await Promise.all(
@@ -135,6 +136,27 @@ export async function generateDomains(pattern: string): Promise<DomainSearchResu
 
     // Filter to only return available domains
     const availableDomains = domainsWithAvailability.filter((domain) => domain.isAvailable)
+    
+    // If no available domains found and we haven't excluded any yet, retry with exclusions
+    if (availableDomains.length === 0 && excludedDomains.length === 0 && validDomains.length > 0) {
+      console.log(`No available domains found from ${validDomains.length} attempts, generating new options...`)
+      
+      // Tell the AI to generate different options
+      const newPatternResults = []
+      for (const p of patterns) {
+        const options = await generateOptionsForPattern(p.pattern, validDomains)
+        newPatternResults.push({
+          startIndex: p.startIndex,
+          endIndex: p.endIndex,
+          options,
+        })
+      }
+      
+      const newValidPatternResults = newPatternResults.filter((p) => p.options.length > 0)
+      if (newValidPatternResults.length > 0) {
+        return generateDomains(pattern, validDomains)
+      }
+    }
 
     return {
       domains: availableDomains,

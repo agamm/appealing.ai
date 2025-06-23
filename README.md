@@ -2,6 +2,18 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
+### Environment Setup
+
+1. Add your Porkbun API credentials to `.env`:
+   ```bash
+   PORKBUN_API_KEY=your_api_key_here
+   PORKBUN_SECRET_KEY=your_secret_key_here
+   ```
+   
+   Get your API keys from [Porkbun API Access](https://porkbun.com/account/api).
+
+### Running the Development Server
+
 First, run the development server:
 
 ```bash

@@ -14,6 +14,14 @@ const WHOIS_ONLY_TLDS = new Set([
   'org.uk', 'me.uk', 'ac.uk', 'gov.uk', 'plc.uk', 'ltd.uk'
 ])
 
+// TLDs that require Porkbun API
+const PORKBUN_ONLY_TLDS = new Set([
+  'dev', 'app', 'page', 'gay', 'foo', 'zip', 'mov',
+  'nexus', 'phd', 'prof', 'bot', 'dad', 'eat', 'how',
+  'new', 'rsvp', 'day', 'boo', 'cal', 'channel', 'fly',
+  'gdn', 'here', 'ing', 'meme', 'search', 'select', 'wow'
+])
+
 // Types
 
 // Cache for RDAP servers
@@ -67,6 +75,58 @@ function isAvailableWhoisResponse(response: string): boolean {
   return availablePatterns.some(pattern => lowerResponse.includes(pattern))
 }
 
+async function checkPorkbun(domain: string): Promise<boolean> {
+  const apiKey = process.env.PORKBUN_API_KEY
+  const secretKey = process.env.PORKBUN_SECRET_KEY
+  
+  if (!apiKey || !secretKey) {
+    console.error('Porkbun API credentials not found in environment variables')
+    console.error('PORKBUN_API_KEY exists:', !!process.env.PORKBUN_API_KEY)
+    console.error('PORKBUN_SECRET_KEY exists:', !!process.env.PORKBUN_SECRET_KEY)
+    throw new Error('Porkbun API credentials missing')
+  }
+  
+  try {
+    console.log(`Checking domain ${domain} via Porkbun API`)
+    const url = `https://api.porkbun.com/api/json/v3/domain/checkDomain/${domain}`
+    const payload = {
+      apikey: apiKey,
+      secretapikey: secretKey
+    }
+    
+    const { data } = await axios.post(url, payload, { 
+      timeout: 10000,
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    })
+    
+    // Log the response for debugging
+    console.log(`Porkbun response for ${domain}:`, JSON.stringify(data, null, 2))
+    
+    // Check if the response indicates availability
+    // According to Porkbun docs, available domains have status "SUCCESS" and available "yes"
+    if (data.status === 'SUCCESS' && data.response?.avail === 'yes') {
+      console.log(`Domain ${domain} is available via Porkbun`)
+      return true
+    }
+    
+    console.log(`Domain ${domain} is NOT available via Porkbun`)
+    return false
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      console.error(`Porkbun API error for ${domain}:`, {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message
+      })
+    } else {
+      console.error(`Porkbun API error for ${domain}:`, error)
+    }
+    throw error
+  }
+}
+
 // Main functions
 async function checkRdap(domain: string, rdapUrl: string): Promise<boolean> {
   try {
@@ -89,6 +149,11 @@ export async function isDomainAvailable(domain: string): Promise<boolean> {
   try {
     const cleanedDomain = cleanDomain(domain)
     const tld = extractTld(cleanedDomain)
+    
+    // Use Porkbun API for specific TLDs
+    if (PORKBUN_ONLY_TLDS.has(tld)) {
+      return await checkPorkbun(cleanedDomain)
+    }
     
     // Use whois for TLDs without RDAP
     if (WHOIS_ONLY_TLDS.has(tld)) {
