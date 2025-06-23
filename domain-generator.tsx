@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { CheckCircle, XCircle, Loader2, Sparkles } from "lucide-react"
 import { extractPatterns } from "@/lib/patterns"
 import { HighlightedInput } from "@/components/highlighted-input"
+import { useRateLimit } from "@/hooks/use-rate-limit"
 
 interface DomainResult {
   domain: string
@@ -63,9 +64,19 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
   const [error, setError] = useState<string | null>(null)
   const [visibleCount, setVisibleCount] = useState(100)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [currentSearchId, setCurrentSearchId] = useState<string | null>(null)
+  const [tryMoreLimitReached, setTryMoreLimitReached] = useState(false)
+  const [tryMoreRemaining, setTryMoreRemaining] = useState<number | null>(null)
   const checkingRef = useRef<Set<string>>(new Set())
   const abortControllerRef = useRef<AbortController | null>(null)
   const checkAbortControllersRef = useRef<Map<string, AbortController>>(new Map())
+  
+  const { 
+    checkDailySearchLimit, 
+    incrementDailySearches, 
+    checkTryMoreLimit, 
+    incrementTryMore
+  } = useRateLimit()
 
   // Check domain availability
   const checkDomain = useCallback(async (domain: string) => {
@@ -79,7 +90,9 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
     try {
       const response = await fetch('/api/domains/check', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify({ domain }),
         signal: abortController.signal
       })
@@ -129,15 +142,32 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
     abortControllerRef.current = new AbortController()
 
     const expandDomains = async () => {
+      // Check daily search limit
+      const { allowed, remaining } = checkDailySearchLimit()
+      if (!allowed) {
+        setError(`Daily search limit reached - try tomorrow?`)
+        console.log(`Daily searches remaining: ${remaining}`)
+        return
+      }
+      console.log(`Daily searches remaining: ${remaining}`)
+
       setIsExpanding(true)
       setError(null)
       setDomains([])
+      setTryMoreLimitReached(false)
+      setTryMoreRemaining(2) // Reset to initial limit
       checkingRef.current.clear()
+      
+      // Generate a new search ID for this search
+      const searchId = `search-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      setCurrentSearchId(searchId)
 
       try {
         const response = await fetch('/api/domains/expand', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+          'Content-Type': 'application/json'
+        },
           body: JSON.stringify({ pattern: searchTerm }),
           signal: abortControllerRef.current?.signal
         })
@@ -154,6 +184,9 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
         
         setDomains(domainResults)
         setIsExpanding(false)
+        
+        // Increment daily searches on success
+        incrementDailySearches()
       } catch (error: any) {
         if (error.name !== 'AbortError') {
           setError("Failed to generate domains. Please try again.")
@@ -222,6 +255,29 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
 
   // Load more domains based on unavailable ones
   const loadMoreDomains = async () => {
+    // Prevent multiple clicks
+    if (isLoadingMore) return
+    
+    if (!currentSearchId) {
+      setError("No active search to expand")
+      return
+    }
+    
+    // Check try more limit
+    const { allowed, remaining } = checkTryMoreLimit(currentSearchId)
+    if (!allowed) {
+      setTryMoreLimitReached(true)
+      console.log(`Try more suggestions remaining: ${remaining}`)
+      return
+    }
+    
+    // Update remaining count
+    setTryMoreRemaining(remaining - 1)
+    
+    // Increment immediately to prevent race conditions
+    incrementTryMore(currentSearchId)
+    console.log(`Try more suggestions remaining: ${remaining - 1}`)
+    
     setIsLoadingMore(true)
     setError(null)
     
@@ -242,7 +298,9 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
       
       const response = await fetch('/api/domains/expand-more', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify({ 
           pattern: searchTerm,
           unavailableDomains 
@@ -353,10 +411,18 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
               )}
               <div
                 className="px-4 py-2.5 text-gray-600 hover:bg-gray-50 rounded-md cursor-pointer transition-colors duration-150 border border-transparent hover:border-gray-200 flex items-center justify-between font-light"
-                onClick={() => navigator.clipboard.writeText(item.domain)}
-                title="Click to copy"
+                onClick={() => {
+                  if (item.isAvailable === false) {
+                    // Open domain in new tab if taken
+                    window.open(`https://${item.domain}`, '_blank')
+                  } else {
+                    // Copy to clipboard if available
+                    navigator.clipboard.writeText(item.domain)
+                  }
+                }}
+                title={item.isAvailable === false ? "Click to visit" : "Click to copy"}
               >
-            <span className={item.isAvailable === false ? 'text-gray-400' : 'text-gray-700'}>{item.domain}</span>
+            <span className={item.isAvailable === false ? 'text-gray-400 underline' : 'text-gray-700'}>{item.domain}</span>
             {item.isAvailable === null ? (
               <div className="flex items-center gap-2">
                 <div className="flex items-center gap-1">
@@ -400,16 +466,20 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
       </div>
 
       {/* Try More button - show when we have patterns and all domains are visible */}
-      {domains.length > 0 && extractPatterns(searchTerm).length > 0 && !isLoadingMore && !isChecking && !hasMore && (
-        <div className="flex justify-center pt-6">
+      {domains.length > 0 && extractPatterns(searchTerm).length > 0 && !isLoadingMore && !isChecking && !hasMore && !tryMoreLimitReached && (
+        <div className="flex flex-col items-center pt-6 space-y-2">
           <Button 
             onClick={loadMoreDomains}
             className="font-light cursor-pointer"
             variant="default"
+            disabled={isLoadingMore}
           >
             <Sparkles className="w-3.5 h-3.5 mr-1.5 opacity-70" />
             Try More Suggestions
           </Button>
+          {tryMoreRemaining === 1 && (
+            <p className="text-xs text-gray-400 font-light">Last try more attempt</p>
+          )}
         </div>
       )}
 
@@ -417,6 +487,13 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
         <div className="text-center text-sm text-gray-500 pt-4 font-light">
           <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
           Generating more suggestions based on unavailable domains...
+        </div>
+      )}
+
+      {/* Show message when try more limit is reached */}
+      {domains.length > 0 && extractPatterns(searchTerm).length > 0 && !isLoadingMore && !isChecking && !hasMore && tryMoreLimitReached && (
+        <div className="text-center text-sm text-gray-400 pt-6 font-light">
+          Try more limit reached
         </div>
       )}
     </div>
@@ -431,7 +508,7 @@ export default function DomainGenerator() {
   })
 
   const examplePatterns = [
-    { label: "{{get/set}}something.com", value: "{{get/set}}something.com" },
+    { label: "{{cybersecurity startup terms}}.ai", value: "{{cybersecurity startup terms}}.ai" },
     { label: "{{use/try}}myapp.{{com/io}}", value: "{{use/try}}myapp.{{com/io}}" },
     { label: "{{one dictionary word}}.io", value: "{{one dictionary word}}.io" },
   ]
@@ -454,21 +531,20 @@ export default function DomainGenerator() {
         {validation.error && <p className="text-sm text-red-500 font-light">{validation.error}</p>}
       </div>
 
-      <div className="flex gap-2 flex-wrap">
+      <div className="flex gap-4 flex-wrap">
         {examplePatterns.map((example, index) => (
-          <Button
+          <button
             key={index}
-            variant="outline"
-            size="sm"
             onClick={() => validateAndSetSearchTerm(example.value)}
-            className="text-xs cursor-pointer font-light"
+            className="text-xs font-light text-gray-600 underline hover:text-gray-900 transition-colors cursor-pointer"
           >
             {example.label}
-          </Button>
+          </button>
         ))}
       </div>
 
       <DomainList searchTerm={searchTerm} isValid={validation.isValid} />
+      
     </div>
   )
 }

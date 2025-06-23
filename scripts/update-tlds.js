@@ -9,7 +9,7 @@ const path = require('path');
         const data = res.data;
         
         if (data && data.services) {
-            const tldsPath = path.join(__dirname, '..', 'actions', 'tlds.json');
+            const tldsPath = path.join(__dirname, '..', 'lib', 'tlds.json');
             fs.writeFileSync(tldsPath, JSON.stringify(data.services));
             console.log('Updated tlds.json');
             console.log(`Total TLD services: ${data.services.length}`);

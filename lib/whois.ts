@@ -7,7 +7,7 @@ import { promises as dns } from 'dns'
 import { Semaphore } from './semaphore'
 
 // Configuration
-const TLDS_PATH = join(process.cwd(), 'actions', 'tlds.json')
+const TLDS_PATH = join(__dirname, 'tlds.json')
 
 // TLDs that only have WHOIS (no RDAP)
 const WHOIS_ONLY_TLDS = new Set([

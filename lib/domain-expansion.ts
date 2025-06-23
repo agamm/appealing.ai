@@ -53,13 +53,7 @@ ${excludedOptions.length > 0 ? `- DO NOT generate these options that were alread
       .filter((option) => !option.includes(' ')) // Remove any multi-word phrases
       .slice(0, requestedCount || 50)
   } catch {
-    // Fallback
-    if (pattern.includes("/")) {
-      return pattern
-        .split("/")
-        .map((opt) => opt.trim())
-        .filter((opt) => opt.length > 0)
-    }
+
     // For test environments without API key
     if (process.env.NODE_ENV === 'test') {
       console.warn('LLM call failed, returning empty array for pattern:', pattern)
