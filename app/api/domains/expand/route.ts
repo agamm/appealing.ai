@@ -14,8 +14,9 @@ const requestSchema = z.object({
 })
 
 export async function generateOptionsForPattern(pattern: string, excludedOptions: string[] = []): Promise<string[]> {
-  // Handle simple slash patterns first
-  if (pattern.includes("/") && !pattern.includes("with") && !pattern.includes("without")) {
+  // Handle simple slash patterns first - strictly word/word/word format
+  // Match patterns like: apple/banana/cherry or get/set/delete
+  if (pattern.includes("/") && /^[a-zA-Z0-9]+(?:\/[a-zA-Z0-9]+)+$/.test(pattern.trim())) {
     return pattern
       .split("/")
       .map((opt) => opt.trim())
