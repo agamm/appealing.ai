@@ -37,6 +37,7 @@ export async function generateOptionsForPattern(pattern: string, excludedOptions
 - For "with/without -" include both versions
 - If asked to use prefixes, some common ones: get, try, use 
 - Keep words lowercase
+- When pattern asks for "X words" (e.g., "3 words", "10 words"), generate X individual single words, NOT multi-word phrases, and no spaces in between
 - Words/terms are usually not compound words, also they are not TLDs - unless specifically asked for
 - If user asks for play on words, a play on words return a clever use of word meanings or sounds for humor or effect.
 - When pattern asks for "words similar to <word>" return words similar to <word> but also <word>.
@@ -56,6 +57,7 @@ ${excludedOptions.length > 0 ? `- DO NOT generate these options that were alread
     return object.options
       .filter((option) => option.trim().length > 0)
       .filter((option) => !option.includes('.')) // Remove any words with dots
+      .filter((option) => !option.includes(' ')) // Remove any multi-word phrases
       .slice(0, requestedCount || 50)
   } catch (error) {
     // Fallback

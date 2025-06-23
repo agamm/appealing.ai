@@ -80,6 +80,55 @@ describe('Domain Expansion with Real AI', () => {
     }, 30000)
   })
 
+  describe('Domain patterns without {{}} patterns', () => {
+    it('should not make LLM call when pattern has no {{}} placeholders', async () => {
+      const pattern = 'example.com'
+      const patterns = extractPatterns(pattern)
+      
+      // Should extract no patterns
+      expect(patterns).toHaveLength(0)
+      
+      // When we call the API route logic directly, it should not call generateOptionsForPattern
+      // We can verify this by checking that a simple domain returns quickly without AI processing
+      const startTime = Date.now()
+      
+      // Since generateOptionsForPattern is only called when patterns exist,
+      // we just need to verify that extractPatterns returns empty for regular domains
+      const regularDomains = [
+        'example.com',
+        'test.io',
+        'mysite.net',
+        'subdomain.example.com',
+        'my-domain.org'
+      ]
+      
+      regularDomains.forEach(domain => {
+        const extractedPatterns = extractPatterns(domain)
+        expect(extractedPatterns).toHaveLength(0)
+      })
+      
+      const endTime = Date.now()
+      // Should complete very quickly since no LLM calls
+      expect(endTime - startTime).toBeLessThan(100) // Less than 100ms
+    })
+    
+    it('should return empty array for invalid domains without patterns', async () => {
+      const invalidDomains = [
+        'not a domain',
+        'invalid domain name',
+        'test',
+        '.com',
+        'domain.',
+        'domain..com'
+      ]
+      
+      invalidDomains.forEach(domain => {
+        const patterns = extractPatterns(domain)
+        expect(patterns).toHaveLength(0)
+      })
+    })
+  })
+
   describe('Full domain generation flow with real AI', () => {
     it('should generate 110 domains for {{10 words}}{{11 words}}.com', async () => {
       const pattern = '{{10 words}}{{11 words}}.com'
@@ -150,16 +199,20 @@ describe('Domain Expansion with Real AI', () => {
       expect(patternResults[0].options).toHaveLength(3)
       expect(patternResults[1].options).toHaveLength(3)
       
-      // Check that none of the options are compound words
+      // Check that all options are single words (no spaces)
       const allWords = [...patternResults[0].options, ...patternResults[1].options]
       allWords.forEach(word => {
+        // MUST be a single word - no spaces allowed
+        expect(word).not.toContain(' ')
+        expect(word).not.toContain('.')
+        expect(word).toMatch(/^[a-z]+$/) // Only lowercase letters
+        
         // Should not start with common prefixes that indicate compound words
         expect(word).not.toMatch(/^(get|try|use|set)[a-z]+/)
-
-        // Should not be a TLD
-        expect(word).not.toMatch(/\.[A-z]{2-3}/)
+        
         // Should be reasonable single word length
-        expect(word.length).toBeLessThanOrEqual(24) // Allow slightly longer words
+        expect(word.length).toBeGreaterThan(2) // At least 3 characters
+        expect(word.length).toBeLessThanOrEqual(15) // Reasonable word length
       })
       
       // Generate permutations
