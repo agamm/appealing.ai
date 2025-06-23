@@ -1,10 +1,10 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
-import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { CheckCircle, XCircle, Loader2, Sparkles } from "lucide-react"
 import { extractPatterns } from "@/lib/patterns"
+import { HighlightedInput } from "@/components/highlighted-input"
 
 interface DomainResult {
   domain: string
@@ -443,12 +443,11 @@ export default function DomainGenerator() {
   return (
     <div className="max-w-2xl mx-auto space-y-4">
       <div className="space-y-2">
-        <Input
-          type="text"
+        <HighlightedInput
           value={searchTerm}
-          onChange={(e) => validateAndSetSearchTerm(e.target.value)}
+          onChange={validateAndSetSearchTerm}
           placeholder="Enter domain pattern: example.com or {{get/use}}app.{{com/io}}"
-          className={`w-full font-light ${validation.error ? "border-red-500" : ""}`}
+          error={!!validation.error}
         />
         {validation.error && <p className="text-sm text-red-500 font-light">{validation.error}</p>}
       </div>
