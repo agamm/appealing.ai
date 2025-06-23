@@ -164,7 +164,7 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
       }
     }
 
-    const timer = setTimeout(expandDomains, 500)
+    const timer = setTimeout(expandDomains, 300)
     return () => {
       clearTimeout(timer)
       abortAllChecks()
