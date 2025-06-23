@@ -30,6 +30,12 @@ function validateDomainPattern(pattern: string): { isValid: boolean; error: stri
     return { isValid: false, error: "Unmatched {{ }} braces" }
   }
 
+  // Check for empty patterns
+  const emptyPatternMatch = pattern.match(/\{\{\s*\}\}/)
+  if (emptyPatternMatch) {
+    return { isValid: false, error: "Empty pattern {{}} is not allowed" }
+  }
+
   const outsidePattern = pattern.replace(/\{\{[^}]*\}\}/g, "PLACEHOLDER")
   const invalidChars = outsidePattern.match(/[^a-zA-Z0-9.\-PLACEHOLDER]/g)
 

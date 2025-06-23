@@ -6,7 +6,7 @@ import { z } from "zod"
 import validator from "validator"
 import { extractPatterns, generatePermutations } from "@/lib/domain-utils"
 
-import { whois } from "@/lib/whois"
+import { isDomainAvailable } from "@/lib/whois"
 
 const openrouter = createOpenRouter({
   apiKey: "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",
@@ -31,9 +31,12 @@ async function generateOptionsForPattern(pattern: string): Promise<string[]> {
 - For "with/without -" include both versions
 - Common prefixes: get, try, use
 - Keep words lowercase and simple
+- When pattern asks for "words similar to <word>" return words similar to <word> but also <word>.
+- When pattern asks for "words like <word>" don't return "<word>like" or "<word>dup"...
 - Return max 50 options
 - Unless constrained by pattern, return at least 5 options`,
-      prompt: `Generate options for: ${pattern}`,
+      prompt: `Generate options for the following pattern: ${pattern}`,
+      temperature: 0.7,
       schema: z.object({
         options: z.array(z.string()),
       }),
@@ -56,31 +59,17 @@ async function generateOptionsForPattern(pattern: string): Promise<string[]> {
 
 async function checkDomainAvailability(domain: string): Promise<boolean> {
   try {
-    const data = await whois(domain)
-
-    console.log(`Domain ${domain} whois data:`, data)
-
-    // If whois returns data with ldhName, domain is registered
-    if (data && data.ldhName) {
-      return false // Domain is taken
+    const isAvailable = await isDomainAvailable(domain)
+    
+    if (isAvailable) {
+      console.log(`Available domain found: ${domain}`)
     }
-
-    // If no ldhName in response, consider it available
-    return true
+    
+    return isAvailable
   } catch (error) {
     console.error(`Error checking domain availability for ${domain}:`, error)
-    // If error status is 404, domain is available
-    if (error instanceof Error && 'status' in error && error.status === 404) {
-      return true
-    }
-    if (error instanceof Error && 'response' in error) {
-      const errorWithResponse = error as Error & { response?: { status?: number } }
-      if (errorWithResponse.response?.status === 404) {
-        return true
-      }
-    }
-    // For other errors, assume domain might be taken (conservative approach)
-    return true
+    // Conservative: assume taken on error
+    return false
   }
 }
 
@@ -134,7 +123,7 @@ export async function generateDomains(pattern: string): Promise<DomainSearchResu
       .map((domain) => domain.toLowerCase())
       .filter((domain) => validator.isFQDN(domain, { require_tld: true }))
       .filter((domain, index, arr) => arr.indexOf(domain) === index)
-      .slice(0, 50) // Reduced limit for availability checking
+      // .slice(0, 50) // Reduced limit for availability checking
 
     // Check availability for each domain
     const domainsWithAvailability = await Promise.all(

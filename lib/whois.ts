@@ -15,10 +15,6 @@ const WHOIS_ONLY_TLDS = new Set([
 ])
 
 // Types
-interface WhoisResponse {
-  ldhName?: string
-  raw?: string
-}
 
 // Cache for RDAP servers
 let rdapServers: Array<[string[], string[]]> | null = null
@@ -72,22 +68,24 @@ function isAvailableWhoisResponse(response: string): boolean {
 }
 
 // Main functions
-async function checkRdap(domain: string, rdapUrl: string): Promise<WhoisResponse> {
-  const { data } = await axios.get(`${rdapUrl}/domain/${domain}`, { timeout: 10000 })
-  return data
-}
-
-async function checkWhois(domain: string): Promise<WhoisResponse> {
-  const response = await whoisLookupAsync(domain)
-  
-  if (isAvailableWhoisResponse(response)) {
-    return {} // Available
+async function checkRdap(domain: string, rdapUrl: string): Promise<boolean> {
+  try {
+    await axios.get(`${rdapUrl}/domain/${domain}`, { timeout: 10000 })
+    return false // Domain exists
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response?.status === 404) {
+      return true // Domain available
+    }
+    throw error
   }
-  
-  return { ldhName: domain, raw: response }
 }
 
-export async function whois(domain: string): Promise<WhoisResponse> {
+async function checkWhois(domain: string): Promise<boolean> {
+  const response = await whoisLookupAsync(domain)
+  return isAvailableWhoisResponse(response)
+}
+
+export async function isDomainAvailable(domain: string): Promise<boolean> {
   try {
     const cleanedDomain = cleanDomain(domain)
     const tld = extractTld(cleanedDomain)
@@ -103,11 +101,10 @@ export async function whois(domain: string): Promise<WhoisResponse> {
       try {
         return await checkRdap(cleanedDomain, rdapUrl)
       } catch (error) {
-        // 404 means domain is available
-        if (axios.isAxiosError(error) && error.response?.status === 404) {
-          return {}
+        // Fall through to whois on non-404 errors
+        if (!axios.isAxiosError(error) || error.response?.status !== 404) {
+          // Try whois as fallback
         }
-        // Fall through to whois on other errors
       }
     }
     
@@ -117,6 +114,6 @@ export async function whois(domain: string): Promise<WhoisResponse> {
   } catch (error) {
     console.error(`Error checking domain ${domain}:`, error)
     // Conservative: assume taken on error
-    return { ldhName: domain }
+    return false
   }
 }

@@ -4,11 +4,14 @@ export function extractPatterns(input: string): { pattern: string; startIndex: n
   let match
 
   while ((match = regex.exec(input)) !== null) {
-    patterns.push({
-      pattern: match[1],
-      startIndex: match.index,
-      endIndex: match.index + match[0].length,
-    })
+    // Only add non-empty patterns
+    if (match[1].trim().length > 0) {
+      patterns.push({
+        pattern: match[1],
+        startIndex: match.index,
+        endIndex: match.index + match[0].length,
+      })
+    }
   }
 
   return patterns
