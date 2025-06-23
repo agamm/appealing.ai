@@ -1,13 +1,9 @@
-import { readFileSync } from 'fs'
-import { join } from 'path'
 import axios from 'axios'
 import { lookup as whoisLookup } from 'whois'
 import { promisify } from 'util'
 import { promises as dns } from 'dns'
 import { Semaphore } from './semaphore'
-
-// Configuration
-const TLDS_PATH = join(__dirname, 'tlds.json')
+import tldData from './tlds.json'
 
 // TLDs that only have WHOIS (no RDAP)
 const WHOIS_ONLY_TLDS = new Set([
@@ -30,7 +26,7 @@ const PORKBUN_ONLY_TLDS = new Set([
 const porkbunSemaphore = new Semaphore(1, 10000)
 
 // Cache for RDAP servers
-let rdapServers: Array<[string[], string[]]> | null = null
+const rdapServers: Array<[string[], string[]]> = tldData as Array<[string[], string[]]>
 
 // Promisified whois lookup
 const whoisLookupAsync = promisify(whoisLookup) as (domain: string) => Promise<string>
@@ -56,16 +52,8 @@ function extractTld(domain: string): string {
   return parts[parts.length - 1]
 }
 
-function getRdapServers(): Array<[string[], string[]]> {
-  if (!rdapServers) {
-    rdapServers = JSON.parse(readFileSync(TLDS_PATH, 'utf-8'))
-  }
-  return rdapServers!
-}
-
 function getRdapUrl(tld: string): string | null {
-  const servers = getRdapServers()
-  const entry = servers.find(([tlds]) => tlds.includes(tld))
+  const entry = rdapServers.find(([tlds]) => tlds.includes(tld))
   return entry ? entry[1][0].replace(/\/$/, '') : null
 }
 

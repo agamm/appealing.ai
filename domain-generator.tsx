@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Loader2, Sparkles } from "lucide-react"
 import { extractPatterns } from "@/lib/patterns"
@@ -8,6 +8,8 @@ import { HighlightedInput } from "@/components/highlighted-input"
 import { ExamplePatterns } from "@/components/example-patterns"
 import { DomainResult } from "@/components/domain-result"
 import { useRateLimit } from "@/hooks/use-rate-limit"
+import { useIntersectionObserver } from "@/hooks/use-intersection-observer"
+import { UnseenDomainsIndicator } from "@/components/unseen-domains-indicator"
 
 interface DomainResultData {
   domain: string
@@ -69,9 +71,13 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
   const [currentSearchId, setCurrentSearchId] = useState<string | null>(null)
   const [tryMoreLimitReached, setTryMoreLimitReached] = useState(false)
   const [tryMoreRemaining, setTryMoreRemaining] = useState<number | null>(null)
+  const [seenAvailableDomains, setSeenAvailableDomains] = useState<Set<string>>(new Set())
+  const [scrollTrigger, setScrollTrigger] = useState(0)
   const checkingRef = useRef<Set<string>>(new Set())
   const abortControllerRef = useRef<AbortController | null>(null)
   const checkAbortControllersRef = useRef<Map<string, AbortController>>(new Map())
+  const domainRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+  const { entries, observe, unobserve } = useIntersectionObserver({ threshold: 0.5 })
   
   const { 
     checkDailySearchLimit, 
@@ -79,6 +85,97 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
     checkTryMoreLimit, 
     incrementTryMore
   } = useRateLimit()
+
+  // Track when available domains are viewed
+  useEffect(() => {
+    entries.forEach((entry, element) => {
+      if (entry.isIntersecting) {
+        const domain = element.getAttribute('data-domain')
+        const isAvailable = element.getAttribute('data-available') === 'true'
+        
+        if (domain && isAvailable) {
+          setSeenAvailableDomains(prev => {
+            const newSet = new Set(prev)
+            newSet.add(domain)
+            return newSet
+          })
+        }
+      }
+    })
+  }, [entries])
+
+  // Set up observers for domain elements - using a stable ref
+  const observeFunctions = useRef({ observe, unobserve })
+  useEffect(() => {
+    observeFunctions.current = { observe, unobserve }
+  }, [observe, unobserve])
+
+  const setDomainRef = useCallback((domain: string, element: HTMLDivElement | null) => {
+    const prevElement = domainRefs.current.get(domain)
+    
+    if (element && element !== prevElement) {
+      // Only observe if it's a new element
+      domainRefs.current.set(domain, element)
+      observeFunctions.current.observe(element)
+    } else if (!element && prevElement) {
+      // Clean up when element is removed
+      observeFunctions.current.unobserve(prevElement)
+      domainRefs.current.delete(domain)
+    }
+  }, [])
+
+  // Clean up observers when domains change or component unmounts
+  useEffect(() => {
+    return () => {
+      // Clean up all observers
+      domainRefs.current.forEach((element, domain) => {
+        observeFunctions.current.unobserve(element)
+      })
+      domainRefs.current.clear()
+    }
+  }, [])
+
+  // Add scroll listener to update unseen domains position
+  useEffect(() => {
+    const handleScroll = () => {
+      setScrollTrigger(prev => prev + 1)
+    }
+
+    window.addEventListener('scroll', handleScroll)
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
+
+  // Calculate unseen available domains
+  const unseenAvailableDomainsAbove = useMemo(() => {
+    const unseenAvailable: string[] = []
+    
+    for (const domain of domains) {
+      // Only count available domains that haven't been seen
+      if (domain.isAvailable === true && !seenAvailableDomains.has(domain.domain)) {
+        const element = domainRefs.current.get(domain.domain)
+        if (element) {
+          const rect = element.getBoundingClientRect()
+          // Only count if it's above the viewport
+          if (rect.bottom < 0) {
+            unseenAvailable.push(domain.domain)
+          }
+        }
+      }
+    }
+    
+    return unseenAvailable
+  }, [domains, seenAvailableDomains, scrollTrigger])
+
+  // Scroll to first unseen available domain
+  const scrollToFirstUnseen = () => {
+    if (unseenAvailableDomainsAbove.length > 0) {
+      const firstUnseenDomain = unseenAvailableDomainsAbove[0]
+      const element = domainRefs.current.get(firstUnseenDomain)
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
+    }
+  }
 
   // Check domain availability
   const checkDomain = useCallback(async (domain: string) => {
@@ -138,6 +235,7 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
       setDomains([])
       setIsChecking(false)
       setIsExpanding(false)
+      setSeenAvailableDomains(new Set())
       return
     }
 
@@ -159,6 +257,7 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
       setTryMoreLimitReached(false)
       setTryMoreRemaining(2) // Reset to initial limit
       checkingRef.current.clear()
+      setSeenAvailableDomains(new Set())
       
       // Generate a new search ID for this search
       const searchId = `search-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
@@ -406,19 +505,30 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
 
   return (
     <div className="space-y-4">
+      <UnseenDomainsIndicator 
+        unseenAvailableCount={unseenAvailableDomainsAbove.length}
+        onClick={scrollToFirstUnseen}
+      />
+      
       <div className="space-y-1">
         {visibleDomains.map((item, index) => {
           const isFirstNewBatch = item.isNewBatch && 
             (index === 0 || !visibleDomains[index - 1].isNewBatch)
           
           return (
-            <DomainResult
-              key={index}
-              domain={item.domain}
-              isAvailable={item.isAvailable}
-              isFirstNewBatch={isFirstNewBatch}
-              showNewBatchDivider={index > 0}
-            />
+            <div
+              key={item.domain}
+              ref={(el) => setDomainRef(item.domain, el)}
+              data-domain={item.domain}
+              data-available={item.isAvailable?.toString()}
+            >
+              <DomainResult
+                domain={item.domain}
+                isAvailable={item.isAvailable}
+                isFirstNewBatch={isFirstNewBatch}
+                showNewBatchDivider={index > 0}
+              />
+            </div>
           )
         })}
       </div>
