@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { RATE_LIMITS } from '@/lib/rate-limit'
 
 interface RateLimitData {
   dailySearches: number
@@ -8,8 +9,6 @@ interface RateLimitData {
 }
 
 const STORAGE_KEY = 'appealing-rate-limits'
-const DAILY_SEARCH_LIMIT = 10
-const TRY_MORE_PER_SEARCH_LIMIT = 10
 const DAY_IN_MS = 24 * 60 * 60 * 1000
 
 function generateUserId(): string {
@@ -78,8 +77,8 @@ export function useRateLimit() {
   }, [data])
 
   const checkDailySearchLimit = useCallback((): { allowed: boolean; remaining: number } => {
-    const allowed = data.dailySearches < DAILY_SEARCH_LIMIT
-    const remaining = Math.max(0, DAILY_SEARCH_LIMIT - data.dailySearches)
+    const allowed = data.dailySearches < RATE_LIMITS.DAILY_SEARCHES
+    const remaining = Math.max(0, RATE_LIMITS.DAILY_SEARCHES - data.dailySearches)
     return { allowed, remaining }
   }, [data.dailySearches])
 
@@ -92,8 +91,8 @@ export function useRateLimit() {
 
   const checkTryMoreLimit = useCallback((searchId: string): { allowed: boolean; remaining: number } => {
     const tryMoreCount = data.searchLimits[searchId] || 0
-    const allowed = tryMoreCount < TRY_MORE_PER_SEARCH_LIMIT
-    const remaining = Math.max(0, TRY_MORE_PER_SEARCH_LIMIT - tryMoreCount)
+    const allowed = tryMoreCount < RATE_LIMITS.TRY_MORE_PER_SEARCH
+    const remaining = Math.max(0, RATE_LIMITS.TRY_MORE_PER_SEARCH - tryMoreCount)
     return { allowed, remaining }
   }, [data.searchLimits])
 
@@ -124,6 +123,6 @@ export function useRateLimit() {
     incrementTryMore,
     resetLimits,
     dailySearchesUsed: data.dailySearches,
-    dailySearchesRemaining: Math.max(0, DAILY_SEARCH_LIMIT - data.dailySearches)
+    dailySearchesRemaining: Math.max(0, RATE_LIMITS.DAILY_SEARCHES - data.dailySearches)
   }
 }
