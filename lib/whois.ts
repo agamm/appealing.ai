@@ -60,7 +60,7 @@ function getRdapServers(): Array<[string[], string[]]> {
   if (!rdapServers) {
     rdapServers = JSON.parse(readFileSync(TLDS_PATH, 'utf-8'))
   }
-  return rdapServers
+  return rdapServers!
 }
 
 function getRdapUrl(tld: string): string | null {
@@ -170,7 +170,7 @@ export async function isDomainAvailable(domain: string): Promise<boolean> {
           console.log(`${cleanedDomain}: found in RDAP → taken`)
           return false
         }
-      } catch (error) {
+      } catch {
         // RDAP check failed, continue to other methods
         console.log(`${cleanedDomain}: RDAP check failed, continuing...`)
       }

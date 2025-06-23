@@ -28,7 +28,7 @@ export default function LegalPage() {
           <section className="mb-8">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Use of Service</h2>
             <ul className="list-disc list-inside space-y-2 text-gray-700">
-              <li>Our service is provided "as is" without warranties of any kind</li>
+              <li>Our service is provided &quot;as is&quot; without warranties of any kind</li>
               <li>Domain availability information may not be 100% accurate due to timing and registrar differences</li>
               <li>We do not guarantee that a domain shown as available can be successfully registered</li>
               <li>Users are responsible for verifying domain availability with their chosen registrar</li>

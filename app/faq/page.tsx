@@ -15,7 +15,7 @@ const faqItems: FAQItem[] = [
     answer: (
       <div className="space-y-2">
         <p>We make money through affiliate links when you purchase domains through our partner registrars.</p>
-        <p>We'd love if you used our links to support the site, but we completely understand if you have your own preferred domain providers!</p>
+        <p>We&apos;d love if you used our links to support the site, but we completely understand if you have your own preferred domain providers!</p>
         <p className="font-semibold">We do NOT front-run domains. Your searches are private and we never register domains that users search for.</p>
       </div>
     )
@@ -60,8 +60,8 @@ const faqItems: FAQItem[] = [
     question: "Do you register domains directly?",
     answer: (
       <div className="space-y-2">
-        <p>No, we don't register domains directly. We're a search and discovery tool that helps you find available domains.</p>
-        <p>Once you find a domain you like, you can register it through any domain registrar of your choice. We provide affiliate links to popular registrars if you'd like to support us.</p>
+        <p>No, we don&apos;t register domains directly. We&apos;re a search and discovery tool that helps you find available domains.</p>
+        <p>Once you find a domain you like, you can register it through any domain registrar of your choice. We provide affiliate links to popular registrars if you&apos;d like to support us.</p>
       </div>
     )
   }

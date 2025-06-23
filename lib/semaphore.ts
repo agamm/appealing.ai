@@ -18,7 +18,8 @@ export class Semaphore {
       const now = Date.now()
       const timeSinceLastRun = now - this.lastRun
       if (timeSinceLastRun < this.minInterval) {
-        await new Promise(resolve => setTimeout(resolve, this.minInterval - timeSinceLastRun))
+        const delay = this.minInterval - timeSinceLastRun
+        await new Promise(resolve => setTimeout(resolve, delay))
       }
       this.lastRun = Date.now()
     }

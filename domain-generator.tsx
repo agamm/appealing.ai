@@ -404,7 +404,7 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
         <div className="flex justify-center pt-6">
           <Button 
             onClick={loadMoreDomains}
-            className="font-light"
+            className="font-light cursor-pointer"
             variant="default"
           >
             <Sparkles className="w-3.5 h-3.5 mr-1.5 opacity-70" />

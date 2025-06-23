@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState, useEffect } from "react"
+import { useRef } from "react"
 import { cn } from "@/lib/utils"
 
 interface HighlightedInputProps {

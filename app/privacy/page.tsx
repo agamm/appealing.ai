@@ -77,7 +77,7 @@ export default function PrivacyPage() {
           <section className="mb-8">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Your Rights</h2>
             <p className="text-gray-700 mb-4">
-              Since we don't collect personal information, there's no personal data to access, modify, or delete. 
+              Since we don&apos;t collect personal information, there&apos;s no personal data to access, modify, or delete. 
               You can use our service anonymously.
             </p>
           </section>
