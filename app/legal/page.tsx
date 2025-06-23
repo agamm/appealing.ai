@@ -26,12 +26,28 @@ export default function LegalPage() {
           </section>
 
           <section className="mb-8">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Use of Service</h2>
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Acceptable Use</h2>
+            <p className="text-gray-700 mb-4">You agree to use our service responsibly and lawfully. You may not:</p>
             <ul className="list-disc list-inside space-y-2 text-gray-700">
-              <li>Our service is provided &quot;as is&quot; without warranties of any kind</li>
+              <li>Use automated scripts or bots to collect information from our service</li>
+              <li>Attempt to reverse engineer, decompile, or modify our code</li>
+              <li>Frame or mirror any part of our service on another website</li>
+              <li>Sell, resell, rent, or charge others for using our service</li>
+              <li>Use our service for any illegal or unauthorized purpose</li>
+              <li>Impersonate any person or entity</li>
+              <li>Interfere with or disrupt the service or servers</li>
+            </ul>
+          </section>
+
+          <section className="mb-8">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Service Availability and Disclaimers</h2>
+            <ul className="list-disc list-inside space-y-2 text-gray-700">
+              <li>Our service is provided &quot;as is&quot; and &quot;as available&quot; without warranties of any kind</li>
               <li>Domain availability information may not be 100% accurate due to timing and registrar differences</li>
               <li>We do not guarantee that a domain shown as available can be successfully registered</li>
               <li>Users are responsible for verifying domain availability with their chosen registrar</li>
+              <li>We are not responsible for any deletion of or failure to store any content</li>
+              <li>The service is not designed for high-risk activities where failure could lead to harm</li>
             </ul>
           </section>
 
