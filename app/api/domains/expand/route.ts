@@ -13,7 +13,7 @@ const requestSchema = z.object({
   pattern: z.string().min(1)
 })
 
-async function generateOptionsForPattern(pattern: string, excludedOptions: string[] = []): Promise<string[]> {
+export async function generateOptionsForPattern(pattern: string, excludedOptions: string[] = []): Promise<string[]> {
   // Handle simple slash patterns first
   if (pattern.includes("/") && !pattern.includes("with") && !pattern.includes("without")) {
     return pattern
@@ -34,8 +34,9 @@ async function generateOptionsForPattern(pattern: string, excludedOptions: strin
 - If pattern contains "/" return those exact options
 - For "dictionary word" return common English words suitable for domains
 - For "with/without -" include both versions
-- Common prefixes: get, try, use
+- If asked to use prefixes, some common ones: get, try, use 
 - Keep words lowercase
+- Words/terms are usually not compound words, also they are not TLDs - unless specifically asked for
 - If user asks for play on words, a play on words return a clever use of word meanings or sounds for humor or effect.
 - When pattern asks for "words similar to <word>" return words similar to <word> but also <word>.
 - When pattern asks for "words like <word>" don't return "<word>like" or "<word>dup"...
@@ -51,8 +52,11 @@ ${excludedOptions.length > 0 ? `- DO NOT generate these options that were alread
       }),
     })
 
-    return object.options.filter((option) => option.trim().length > 0).slice(0, requestedCount || 50)
-  } catch {
+    return object.options
+      .filter((option) => option.trim().length > 0)
+      .filter((option) => !option.includes('.')) // Remove any words with dots
+      .slice(0, requestedCount || 50)
+  } catch (error) {
     // Fallback
     if (pattern.includes("/")) {
       return pattern
@@ -60,7 +64,11 @@ ${excludedOptions.length > 0 ? `- DO NOT generate these options that were alread
         .map((opt) => opt.trim())
         .filter((opt) => opt.length > 0)
     }
-    return pattern.trim().length > 0 ? [pattern.trim()] : []
+    // For test environments without API key
+    if (process.env.NODE_ENV === 'test') {
+      console.warn('LLM call failed, returning empty array for pattern:', pattern)
+    }
+    return []
   }
 }
 
