@@ -118,10 +118,6 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
 
   return (
     <div className="space-y-4">
-      <div className="text-center text-sm text-gray-600 pb-2">
-        {searchResult.availableCount} available out of {searchResult.totalChecked} searched
-      </div>
-
       <div className="space-y-1">
         {visibleDomains.map((item, index) => (
           <div
@@ -146,6 +142,10 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
           </Button>
         </div>
       )}
+
+      <div className="text-center text-sm text-gray-600 pt-2">
+        {searchResult.availableCount} available out of {searchResult.totalChecked} searched
+      </div>
     </div>
   )
 }
@@ -174,6 +174,12 @@ export default function DomainGenerator() {
     setValidation(result)
   }, [searchTerm])
 
+  const examplePatterns = [
+    { label: "{{get/set}}something.com", value: "{{get/set}}something.com" },
+    { label: "{{use/try}}myapp.{{com/io}}", value: "{{use/try}}myapp.{{com/io}}" },
+    { label: "{{one dictionary word}}.io", value: "{{one dictionary word}}.io" },
+  ]
+
   return (
     <div className="min-h-screen bg-white flex items-start justify-center pt-32">
       <div className="w-full max-w-md space-y-6">
@@ -196,6 +202,22 @@ export default function DomainGenerator() {
               }`}
             />
             {validation.error && <div className="text-red-500 text-sm px-1">{validation.error}</div>}
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-xs text-gray-500 px-1">Try these examples:</p>
+            <div className="flex flex-wrap gap-2">
+              {examplePatterns.map((example, index) => (
+                <button
+                  key={index}
+                  onClick={() => setSearchTerm(example.value)}
+                  className="text-xs px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors duration-150 border border-gray-200 cursor-pointer"
+                  title={`Click to use: ${example.value}`}
+                >
+                  {example.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           <Suspense fallback={<LoadingFallback />}>

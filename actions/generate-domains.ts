@@ -4,8 +4,9 @@ import { generateObject } from "ai"
 import { createOpenRouter } from "@openrouter/ai-sdk-provider"
 import { z } from "zod"
 import validator from "validator"
-import whois from "freewhois"
 import { extractPatterns, generatePermutations } from "@/lib/domain-utils"
+
+import { whois } from "@/lib/whois"
 
 const openrouter = createOpenRouter({
   apiKey: "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",
@@ -30,7 +31,8 @@ async function generateOptionsForPattern(pattern: string): Promise<string[]> {
 - For "with/without -" include both versions
 - Common prefixes: get, try, use
 - Keep words lowercase and simple
-- Return max 20 options`,
+- Return max 50 options
+- Unless constrained by pattern, return at least 5 options`,
       prompt: `Generate options for: ${pattern}`,
       schema: z.object({
         options: z.array(z.string()),
@@ -38,7 +40,7 @@ async function generateOptionsForPattern(pattern: string): Promise<string[]> {
     })
 
     return object.options.filter((option) => option.trim().length > 0)
-  } catch (error) {
+  } catch {
     // Fallback
     if (pattern.includes("/")) {
       return pattern
