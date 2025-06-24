@@ -74,10 +74,13 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
   const [seenAvailableDomains, setSeenAvailableDomains] = useState<Set<string>>(new Set())
   const [fadingDomains, setFadingDomains] = useState<Set<string>>(new Set())
   const [scrollTrigger, setScrollTrigger] = useState(0)
+  const [patternResults, setPatternResults] = useState<any[]>([])
+  const [allGeneratedDomains, setAllGeneratedDomains] = useState<Set<string>>(new Set())
   const checkingRef = useRef<Set<string>>(new Set())
   const abortControllerRef = useRef<AbortController | null>(null)
   const checkAbortControllersRef = useRef<Map<string, AbortController>>(new Map())
   const domainRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+  const processingDomainsRef = useRef<Set<string>>(new Set())
   const { entries, observe, unobserve } = useIntersectionObserver({ threshold: 0.5 })
   
   const { 
@@ -89,18 +92,17 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
 
   // Track when available domains are viewed
   useEffect(() => {
+    const toFade: string[] = []
+    const toMarkSeen: string[] = []
+    
     entries.forEach((entry, element) => {
       if (entry.isIntersecting) {
         const domain = element.getAttribute('data-domain')
         const isAvailable = element.getAttribute('data-available') === 'true'
         
-        if (domain && isAvailable && !seenAvailableDomains.has(domain)) {
-          // Start fade animation
-          setFadingDomains(prev => {
-            const newSet = new Set(prev)
-            newSet.add(domain)
-            return newSet
-          })
+        if (domain && isAvailable && !seenAvailableDomains.has(domain) && !processingDomainsRef.current.has(domain)) {
+          processingDomainsRef.current.add(domain)
+          toFade.push(domain)
           
           // After animation completes, mark as seen
           setTimeout(() => {
@@ -114,11 +116,21 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
               newSet.delete(domain)
               return newSet
             })
+            processingDomainsRef.current.delete(domain)
           }, 2000) // Match the 2s fade animation duration
         }
       }
     })
-  }, [entries, seenAvailableDomains])
+    
+    // Batch update fading domains
+    if (toFade.length > 0) {
+      setFadingDomains(prev => {
+        const newSet = new Set(prev)
+        toFade.forEach(domain => newSet.add(domain))
+        return newSet
+      })
+    }
+  }, [entries])
 
   // Set up observers for domain elements - using a stable ref
   const observeFunctions = useRef({ observe, unobserve })
@@ -148,6 +160,7 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
         observeFunctions.current.unobserve(element)
       })
       domainRefs.current.clear()
+      processingDomainsRef.current.clear()
     }
   }, [])
 
@@ -260,6 +273,8 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
       setIsExpanding(false)
       setSeenAvailableDomains(new Set())
       setFadingDomains(new Set())
+      setPatternResults([])
+      setAllGeneratedDomains(new Set())
       return
     }
 
@@ -283,6 +298,7 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
       checkingRef.current.clear()
       setSeenAvailableDomains(new Set())
       setFadingDomains(new Set())
+      setAllGeneratedDomains(new Set())
       
       // Generate a new search ID for this search
       const searchId = `search-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
@@ -309,6 +325,8 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
         }))
         
         setDomains(domainResults)
+        setPatternResults(data.patternResults || [])
+        setAllGeneratedDomains(new Set(data.domains.map((d: string) => d.toLowerCase())))
         setIsExpanding(false)
         
         // Increment daily searches on success
@@ -440,7 +458,8 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
         },
         body: JSON.stringify({ 
           pattern: searchTerm,
-          unavailableDomains 
+          unavailableDomains: Array.from(allGeneratedDomains), // Send all generated domains to avoid duplicates
+          patternResults 
         }),
         signal: loadMoreAbortController.signal
       })
@@ -450,11 +469,28 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
       }
       
       const data = await response.json()
+      
+      // Check if we received a message indicating no more suggestions
+      if (data.message && data.domains.length === 0) {
+        // Show message but don't clear existing domains
+        setTryMoreLimitReached(true) // Use this to show the message
+        setIsLoadingMore(false)
+        return
+      }
+      
       const newDomainResults: DomainResultData[] = data.domains.map((domain: string) => ({
         domain,
         isAvailable: null,
         isNewBatch: true
       }))
+      
+      // Update pattern results for next expand-more call
+      setPatternResults(data.patternResults || [])
+      
+      // Add new domains to the set of all generated domains
+      const newDomainsSet = new Set(allGeneratedDomains)
+      data.domains.forEach((domain: string) => newDomainsSet.add(domain.toLowerCase()))
+      setAllGeneratedDomains(newDomainsSet)
       
       // Add new domains to the list
       setDomains(prev => [...prev, ...newDomainResults])
@@ -605,7 +641,7 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
       {/* Show message when try more limit is reached */}
       {domains.length > 0 && extractPatterns(searchTerm).length > 0 && !isLoadingMore && !isChecking && !hasMore && tryMoreLimitReached && (
         <div className="text-center text-sm text-gray-400 pt-6 font-light">
-          Try more limit reached
+          No more unique domain suggestions available
         </div>
       )}
     </div>

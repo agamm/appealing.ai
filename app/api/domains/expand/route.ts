@@ -47,7 +47,11 @@ export async function POST(request: NextRequest) {
       .filter((domain) => validator.isFQDN(domain, { require_tld: true }))
       .filter((domain, index, arr) => arr.indexOf(domain) === index)
     
-    return NextResponse.json({ domains: validDomains })
+    return NextResponse.json({ 
+      domains: validDomains,
+      pattern,
+      patternResults: validPatternResults
+    })
     
   } catch {
     console.error('Error expanding domains')
