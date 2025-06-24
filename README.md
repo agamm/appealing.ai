@@ -4,13 +4,12 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ### Environment Setup
 
-1. Add your Porkbun API credentials to `.env`:
+1. Add your Domainr API credentials to `.env`:
    ```bash
-   PORKBUN_API_KEY=your_api_key_here
-   PORKBUN_SECRET_KEY=your_secret_key_here
+   DOMAINR_RAPIDAPI_KEY=your_rapidapi_key_here
    ```
    
-   Get your API keys from [Porkbun API Access](https://porkbun.com/account/api).
+   Get your API key from [RapidAPI Domainr](https://rapidapi.com/domainr/api/domainr).
 
 ### Running the Development Server
 

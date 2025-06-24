@@ -9,11 +9,13 @@ import { ExamplePatterns } from "@/components/example-patterns"
 import { DomainResult } from "@/components/domain-result"
 import { useRateLimit } from "@/hooks/use-rate-limit"
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer"
+import { useExpandDomains, useCheckDomain, useExpandMoreDomains } from "@/hooks/use-domains"
+import { useQueryClient } from "@tanstack/react-query"
 
 interface DomainResultData {
   domain: string
-  isAvailable: boolean | null // null means checking
-  isNewBatch?: boolean // marks domains from "Try More"
+  isAvailable: boolean | null
+  isNewBatch?: boolean
 }
 
 function validateDomainQuery(query: string): { isValid: boolean; error: string | null } {
@@ -40,7 +42,6 @@ function validateDomainQuery(query: string): { isValid: boolean; error: string |
     return { isValid: false, error: "Unmatched {{ }} braces" }
   }
 
-  // Check for empty patterns
   const emptyPatternMatch = query.match(/\{\{\s*\}\}/)
   if (emptyPatternMatch) {
     return { isValid: false, error: "Empty pattern {{}} is not allowed" }
@@ -60,26 +61,33 @@ function validateDomainQuery(query: string): { isValid: boolean; error: string |
   return { isValid: true, error: null }
 }
 
+// Component to handle individual domain checking
+function DomainChecker({ domain, onResult }: { domain: string; onResult: (domain: string, isAvailable: boolean) => void }) {
+  const { data, isSuccess } = useCheckDomain(domain)
+  
+  useEffect(() => {
+    if (isSuccess && data) {
+      onResult(domain, data.isAvailable)
+    }
+  }, [isSuccess, data, domain, onResult])
+  
+  return null
+}
+
 function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: boolean }) {
   const [domains, setDomains] = useState<DomainResultData[]>([])
-  const [isExpanding, setIsExpanding] = useState(false)
-  const [isChecking, setIsChecking] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [visibleCount, setVisibleCount] = useState(100)
-  const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [currentSearchId, setCurrentSearchId] = useState<string | null>(null)
   const [tryMoreLimitReached, setTryMoreLimitReached] = useState(false)
   const [tryMoreRemaining, setTryMoreRemaining] = useState<number | null>(null)
   const [seenAvailableDomains, setSeenAvailableDomains] = useState<Set<string>>(new Set())
   const [fadingDomains, setFadingDomains] = useState<Set<string>>(new Set())
-  const [patternResults, setPatternResults] = useState<any[]>([])
   const [allGeneratedDomains, setAllGeneratedDomains] = useState<Set<string>>(new Set())
-  const checkingRef = useRef<Set<string>>(new Set())
-  const abortControllerRef = useRef<AbortController | null>(null)
-  const checkAbortControllersRef = useRef<Map<string, AbortController>>(new Map())
+  const [domainsToCheck, setDomainsToCheck] = useState<string[]>([])
   const domainRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const processingDomainsRef = useRef<Set<string>>(new Set())
   const { entries, observe, unobserve } = useIntersectionObserver({ threshold: 0.5 })
+  const queryClient = useQueryClient()
   
   const { 
     checkDailySearchLimit, 
@@ -88,10 +96,15 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
     incrementTryMore
   } = useRateLimit()
 
+  // Use React Query for expanding domains
+  const { data: expandData, isLoading: isExpanding, error: expandError } = useExpandDomains(searchTerm, isValid)
+  
+  // Use React Query for expanding more domains
+  const expandMoreMutation = useExpandMoreDomains()
+
   // Track when available domains are viewed
   useEffect(() => {
     const toFade: string[] = []
-    const toMarkSeen: string[] = []
     
     entries.forEach((entry, element) => {
       if (entry.isIntersecting) {
@@ -102,7 +115,6 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
           processingDomainsRef.current.add(domain)
           toFade.push(domain)
           
-          // After animation completes, mark as seen
           setTimeout(() => {
             setSeenAvailableDomains(prev => {
               const newSet = new Set(prev)
@@ -115,191 +127,83 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
               return newSet
             })
             processingDomainsRef.current.delete(domain)
-          }, 2000) // Match the 2s fade animation duration
+          }, 3000)
         }
       }
     })
     
-    // Batch update fading domains
     if (toFade.length > 0) {
       setFadingDomains(prev => {
         const newSet = new Set(prev)
-        toFade.forEach(domain => newSet.add(domain))
+        toFade.forEach(d => newSet.add(d))
         return newSet
       })
     }
-  }, [entries])
+  }, [entries, seenAvailableDomains])
 
-  // Set up observers for domain elements - using a stable ref
-  const observeFunctions = useRef({ observe, unobserve })
-  useEffect(() => {
-    observeFunctions.current = { observe, unobserve }
+  // Set domain ref for intersection observer
+  const setDomainRef = useCallback((domain: string, element: HTMLDivElement | null) => {
+    if (element) {
+      domainRefs.current.set(domain, element)
+      observe(element)
+    } else {
+      const existingElement = domainRefs.current.get(domain)
+      if (existingElement) {
+        unobserve(existingElement)
+        domainRefs.current.delete(domain)
+      }
+    }
   }, [observe, unobserve])
 
-  const setDomainRef = useCallback((domain: string, element: HTMLDivElement | null) => {
-    const prevElement = domainRefs.current.get(domain)
-    
-    if (element && element !== prevElement) {
-      // Only observe if it's a new element
-      domainRefs.current.set(domain, element)
-      observeFunctions.current.observe(element)
-    } else if (!element && prevElement) {
-      // Clean up when element is removed
-      observeFunctions.current.unobserve(prevElement)
-      domainRefs.current.delete(domain)
-    }
-  }, [])
-
-  // Clean up observers when domains change or component unmounts
+  // Clean up observers
   useEffect(() => {
     return () => {
-      // Clean up all observers
-      domainRefs.current.forEach((element, domain) => {
-        observeFunctions.current.unobserve(element)
-      })
+      domainRefs.current.forEach(el => unobserve(el))
       domainRefs.current.clear()
       processingDomainsRef.current.clear()
     }
+  }, [unobserve])
+
+  // Handle domain checking results
+  const handleDomainCheckResult = useCallback((domain: string, isAvailable: boolean) => {
+    setDomains(prev => 
+      prev.map(d => d.domain === domain ? { ...d, isAvailable } : d)
+    )
+    setDomainsToCheck(prev => prev.filter(d => d !== domain))
   }, [])
 
-
-
-  // Check domain availability
-  const checkDomain = useCallback(async (domain: string) => {
-    if (checkingRef.current.has(domain)) return
-    
-    // Create abort controller for this specific check
-    const abortController = new AbortController()
-    checkAbortControllersRef.current.set(domain, abortController)
-    checkingRef.current.add(domain)
-    
-    try {
-      const response = await fetch('/api/domains/check', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ domain }),
-        signal: abortController.signal
-      })
-      
-      if (response.ok) {
-        const data = await response.json()
-        setDomains(prev => 
-          prev.map(d => d.domain === domain ? { ...d, isAvailable: data.isAvailable } : d)
-        )
-      }
-    } catch (error: any) {
-      if (error.name !== 'AbortError') {
-        console.error(`Error checking ${domain}:`, error)
-      }
-    } finally {
-      checkingRef.current.delete(domain)
-      checkAbortControllersRef.current.delete(domain)
-    }
-  }, [])
-
-  // Abort all ongoing domain checks
-  const abortAllChecks = () => {
-    // Abort individual domain checks
-    checkAbortControllersRef.current.forEach((controller, domain) => {
-      controller.abort()
-    })
-    checkAbortControllersRef.current.clear()
-    checkingRef.current.clear()
-    
-    // Abort the main expand operation
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort()
-    }
-  }
-
+  // Update domains when expand data changes
   useEffect(() => {
-    // Abort all ongoing checks when search term changes
-    abortAllChecks()
-    
-    if (!searchTerm.trim() || !isValid) {
-      setDomains([])
-      setIsChecking(false)
-      setIsExpanding(false)
-      setSeenAvailableDomains(new Set())
-      setFadingDomains(new Set())
-      setPatternResults([])
-      setAllGeneratedDomains(new Set())
-      return
-    }
-
-    abortControllerRef.current = new AbortController()
-
-    const expandDomains = async () => {
-      // Check daily search limit
-      const { allowed, remaining } = checkDailySearchLimit()
-      if (!allowed) {
-        setError(`Daily search limit reached - try tomorrow?`)
-        console.log(`Daily searches remaining: ${remaining}`)
-        return
-      }
-      console.log(`Daily searches remaining: ${remaining}`)
-
-      setIsExpanding(true)
-      setError(null)
-      setDomains([])
-      setTryMoreLimitReached(false)
-      setTryMoreRemaining(2) // Reset to initial limit
-      checkingRef.current.clear()
-      setSeenAvailableDomains(new Set())
-      setFadingDomains(new Set())
-      setAllGeneratedDomains(new Set())
+    if (expandData?.domains && expandData.domains.length > 0) {
+      const newDomains: DomainResultData[] = expandData.domains.map((domain: string) => ({
+        domain,
+        isAvailable: null
+      }))
       
-      // Generate a new search ID for this search
+      setDomains(newDomains)
+      setAllGeneratedDomains(new Set(expandData.domains.map((d: string) => d.toLowerCase())))
+      setFadingDomains(new Set())
+      setSeenAvailableDomains(new Set())
+      setTryMoreLimitReached(false)
+      
+      // Generate a new search ID
       const searchId = `search-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
       setCurrentSearchId(searchId)
-
-      try {
-        const response = await fetch('/api/domains/expand', {
-          method: 'POST',
-          headers: { 
-          'Content-Type': 'application/json'
-        },
-          body: JSON.stringify({ query: searchTerm }),
-          signal: abortControllerRef.current?.signal
-        })
-
-        if (!response.ok) {
-          throw new Error('Failed to expand domains')
-        }
-
-        const data = await response.json()
-        const domainResults: DomainResultData[] = data.domains.map((domain: string) => ({
-          domain,
-          isAvailable: null
-        }))
-        
-        setDomains(domainResults)
-        setPatternResults(data.patternResults || [])
-        setAllGeneratedDomains(new Set(data.domains.map((d: string) => d.toLowerCase())))
-        setIsExpanding(false)
-        
-        // Increment daily searches on success
+      
+      // Check daily search limit after setting domains
+      const { allowed } = checkDailySearchLimit()
+      if (allowed) {
+        // Increment daily searches only if allowed
         incrementDailySearches()
-      } catch (error: any) {
-        if (error.name !== 'AbortError') {
-          setError("Failed to generate domains. Please try again.")
-          console.error('Error:', error)
-        }
-        setIsExpanding(false)
-        setIsChecking(false)
       }
+      
+      // Start checking domains
+      const visibleDomains = newDomains.slice(0, visibleCount)
+      setDomainsToCheck(visibleDomains.map(d => d.domain))
     }
+  }, [expandData, checkDailySearchLimit, incrementDailySearches, visibleCount])
 
-    const timer = setTimeout(expandDomains, 300)
-    return () => {
-      clearTimeout(timer)
-      abortAllChecks()
-    }
-  }, [searchTerm, isValid])
-
-  // Monitor try more limit for current search
+  // Monitor try more limit
   useEffect(() => {
     if (currentSearchId) {
       const { allowed, remaining } = checkTryMoreLimit(currentSearchId)
@@ -310,155 +214,66 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
     }
   }, [currentSearchId, domains.length, checkTryMoreLimit])
 
-  // Check domains as they become visible
+  // Check more domains when visible count increases
   useEffect(() => {
-    const checkVisibleDomains = async () => {
-      const visibleDomains = domains.slice(0, visibleCount)
-      const uncheckedVisibleDomains = visibleDomains.filter(d => 
-        d.isAvailable === null && !checkingRef.current.has(d.domain)
-      )
-      
-      if (uncheckedVisibleDomains.length === 0) {
-        // Update checking state if no domains left to check
-        if (checkingRef.current.size === 0) {
-          setIsChecking(false)
-        }
-        return
-      }
-      
-      setIsChecking(true)
-      
-      try {
-        // Group by TLD for better rate limiting
-        const porkbunDomains = uncheckedVisibleDomains.filter(d => {
-          const tld = d.domain.split('.').pop() || ''
-          return ['dev', 'app', 'page', 'gay', 'foo', 'zip', 'mov'].includes(tld)
-        })
-        
-        const otherDomains = uncheckedVisibleDomains.filter(d => !porkbunDomains.some(p => p.domain === d.domain))
-        
-        // Check non-Porkbun domains in parallel batches
-        const batchSize = 5
-        for (let i = 0; i < otherDomains.length; i += batchSize) {
-          const batch = otherDomains.slice(i, i + batchSize)
-          await Promise.all(batch.map(d => checkDomain(d.domain)))
-        }
-        
-        // Check Porkbun domains sequentially
-        for (const d of porkbunDomains) {
-          await checkDomain(d.domain)
-        }
-      } finally {
-        // Ensure checking state is updated
-        if (checkingRef.current.size === 0) {
-          setIsChecking(false)
-        }
-      }
-    }
+    const visibleDomains = domains.slice(0, visibleCount)
+    const uncheckedDomains = visibleDomains
+      .filter(d => d.isAvailable === null)
+      .filter(d => !domainsToCheck.includes(d.domain))
+      .map(d => d.domain)
     
-    checkVisibleDomains()
-  }, [visibleCount, domains.length, checkDomain])
+    if (uncheckedDomains.length > 0) {
+      setDomainsToCheck(prev => [...prev, ...uncheckedDomains])
+    }
+  }, [visibleCount, domains, domainsToCheck])
 
-  // Load more domains based on unavailable ones
+  // Load more domains handler
   const loadMoreDomains = async () => {
-    // Prevent multiple clicks
-    if (isLoadingMore) return
+    if (!currentSearchId || !expandData) return
     
-    if (!currentSearchId) {
-      setError("No active search to expand")
-      return
-    }
-    
-    // Check try more limit
     const { allowed, remaining } = checkTryMoreLimit(currentSearchId)
     if (!allowed) {
       setTryMoreLimitReached(true)
-      console.log(`Try more suggestions remaining: ${remaining}`)
       return
     }
     
-    // Update remaining count
     setTryMoreRemaining(remaining - 1)
-    
-    // Increment immediately to prevent race conditions
     incrementTryMore(currentSearchId)
-    console.log(`Try more suggestions remaining: ${remaining - 1}`)
     
-    setIsLoadingMore(true)
-    setError(null)
-    
-    // Create a new abort controller for this operation
-    const loadMoreAbortController = new AbortController()
-    
-    try {
-      // Get all unavailable domains
-      const unavailableDomains = domains
-        .filter(d => d.isAvailable === false)
-        .map(d => d.domain)
-      
-      if (unavailableDomains.length === 0) {
-        setError("No unavailable domains to base suggestions on")
-        setIsLoadingMore(false)
-        return
+    expandMoreMutation.mutate({
+      query: searchTerm,
+      unavailableDomains: Array.from(allGeneratedDomains),
+      patternResults: expandData.patternResults
+    }, {
+      onSuccess: (data) => {
+        if (data.message || data.domains.length === 0) {
+          setTryMoreLimitReached(true)
+          return
+        }
+        
+        const newDomainResults: DomainResultData[] = data.domains.map((domain: string) => ({
+          domain,
+          isAvailable: null,
+          isNewBatch: true
+        }))
+        
+        const newDomainsSet = new Set(allGeneratedDomains)
+        data.domains.forEach((domain: string) => newDomainsSet.add(domain.toLowerCase()))
+        setAllGeneratedDomains(newDomainsSet)
+        
+        setDomains(prev => [...prev, ...newDomainResults])
+        
+        // Start checking new domains
+        setDomainsToCheck(prev => [...prev, ...data.domains])
       }
-      
-      const response = await fetch('/api/domains/expand-more', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ 
-          query: searchTerm,
-          unavailableDomains: Array.from(allGeneratedDomains), // All previously generated domains (to avoid duplicates)
-          patternResults 
-        }),
-        signal: loadMoreAbortController.signal
-      })
-      
-      if (!response.ok) {
-        throw new Error('Failed to generate more suggestions')
-      }
-      
-      const data = await response.json()
-      
-      // Check if we received a message indicating no more suggestions OR no domains
-      if (data.message || data.domains.length === 0) {
-        // Show message but don't clear existing domains
-        setTryMoreLimitReached(true) // Use this to show the message
-        setIsLoadingMore(false)
-        return
-      }
-      
-      const newDomainResults: DomainResultData[] = data.domains.map((domain: string) => ({
-        domain,
-        isAvailable: null,
-        isNewBatch: true
-      }))
-      
-      // Update pattern results for next expand-more call
-      setPatternResults(data.patternResults || [])
-      
-      // Add new domains to the set of all generated domains
-      const newDomainsSet = new Set(allGeneratedDomains)
-      data.domains.forEach((domain: string) => newDomainsSet.add(domain.toLowerCase()))
-      setAllGeneratedDomains(newDomainsSet)
-      
-      // Add new domains to the list
-      setDomains(prev => [...prev, ...newDomainResults])
-    } catch (error: any) {
-      if (error.name !== 'AbortError') {
-        console.error('Error loading more domains:', error)
-        setError("Failed to generate more suggestions. Please try again.")
-      }
-    } finally {
-      setIsLoadingMore(false)
-    }
+    })
   }
 
   const visibleDomains = domains.slice(0, visibleCount)
   const hasMore = visibleCount < domains.length
   const checkedCount = domains.filter(d => d.isAvailable !== null).length
   const availableCount = domains.filter(d => d.isAvailable === true).length
+  const isChecking = domainsToCheck.length > 0
 
   if (!searchTerm.trim() || !isValid) return null
 
@@ -468,36 +283,14 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
         <div className="space-y-4">
           <div className="space-y-1.5">
             {Array.from({ length: 5 }).map((_, index) => (
-              <div 
-                key={index} 
-                className="fade-in"
-                style={{ animationDelay: `${index * 0.1}s` }}
-              >
-                <div className="px-4 py-2.5 rounded-md border border-gray-100 bg-white overflow-hidden">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div 
-                        className="h-4 rounded shimmer" 
-                        style={{ 
-                          width: `${Math.random() * 60 + 100}px`,
-                        }}
-                      ></div>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-2 h-2 bg-gray-200 rounded-full animate-pulse"></div>
-                      <div className="w-2 h-2 bg-gray-200 rounded-full animate-pulse" style={{ animationDelay: '0.3s' }}></div>
-                      <div className="w-2 h-2 bg-gray-200 rounded-full animate-pulse" style={{ animationDelay: '0.6s' }}></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <div key={index} className="h-12 bg-gray-50 rounded-md animate-pulse"></div>
             ))}
           </div>
-          <div className="text-center pt-2">
-            <div className="inline-flex items-center gap-2 text-sm text-gray-500 font-light">
-              <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeOpacity="0.25"></circle>
-                <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"></path>
+          <div className="text-center text-sm text-gray-500 font-light">
+            <div className="flex items-center justify-center gap-2">
+              <svg className="animate-spin h-4 w-4 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
               <span>Generating domains...</span>
             </div>
@@ -507,8 +300,8 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
     )
   }
 
-  if (error) {
-    return <div className="text-center text-red-500 text-sm py-4 font-light">{error}</div>
+  if (expandError) {
+    return <div className="text-center text-red-500 text-sm py-4 font-light">Failed to generate domains. Please try again.</div>
   }
 
   if (domains.length === 0) {
@@ -542,9 +335,18 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
         })}
       </div>
 
+      {/* Render domain checkers */}
+      {domainsToCheck.map(domain => (
+        <DomainChecker
+          key={domain}
+          domain={domain}
+          onResult={handleDomainCheckResult}
+        />
+      ))}
+
       {hasMore && (
         <div className="flex justify-center pt-2">
-          <Button variant="outline" onClick={() => setVisibleCount((prev) => Math.min(prev + 20, domains.length))} className="text-sm font-light">
+          <Button variant="outline" onClick={() => setVisibleCount(prev => Math.min(prev + 20, domains.length))} className="text-sm font-light">
             Load More ({domains.length - visibleCount} remaining)
           </Button>
         </div>
@@ -559,14 +361,14 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
         )}
       </div>
 
-      {/* Try More button - show when we have patterns and all domains are visible */}
-      {domains.length > 0 && extractPatterns(searchTerm).length > 0 && !isLoadingMore && !isChecking && !hasMore && !tryMoreLimitReached && (
+      {/* Try More button */}
+      {domains.length > 0 && extractPatterns(searchTerm).length > 0 && !expandMoreMutation.isPending && !isChecking && !hasMore && !tryMoreLimitReached && (
         <div className="flex flex-col items-center pt-6 space-y-2">
           <Button 
             onClick={loadMoreDomains}
             className="font-light cursor-pointer"
             variant="default"
-            disabled={isLoadingMore}
+            disabled={expandMoreMutation.isPending}
           >
             <Sparkles className="w-3.5 h-3.5 mr-1.5 opacity-70" />
             Try More Suggestions
@@ -577,7 +379,7 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
         </div>
       )}
 
-      {isLoadingMore && (
+      {expandMoreMutation.isPending && (
         <div className="text-center text-sm text-gray-500 pt-4 font-light">
           <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
           Generating more suggestions based on unavailable domains...
@@ -585,7 +387,7 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
       )}
 
       {/* Show message when try more limit is reached */}
-      {domains.length > 0 && extractPatterns(searchTerm).length > 0 && !isLoadingMore && !isChecking && !hasMore && tryMoreLimitReached && (
+      {domains.length > 0 && extractPatterns(searchTerm).length > 0 && !expandMoreMutation.isPending && !isChecking && !hasMore && tryMoreLimitReached && (
         <div className="text-center text-sm text-gray-400 pt-6 font-light">
           No more unique domain suggestions available
         </div>
