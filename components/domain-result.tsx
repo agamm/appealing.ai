@@ -1,5 +1,6 @@
 import { CheckCircle, XCircle } from "lucide-react"
 import Image from "next/image"
+import { generateNamecheapAffiliateLink } from "@/lib/affiliate-links"
 
 interface DomainResultProps {
   domain: string
@@ -49,7 +50,7 @@ export function DomainResult({
     {
       name: 'Namecheap',
       logo: '/namecheap-logo.svg',
-      url: `https://www.namecheap.com/domains/registration/results/?domain=${domain}`,
+      url: generateNamecheapAffiliateLink(domain),
       width: 80,
       height: 16
     },
