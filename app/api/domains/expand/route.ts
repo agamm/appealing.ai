@@ -5,23 +5,23 @@ import { extractPatterns, generatePermutations } from '@/lib/patterns'
 import { generateOptionsForPattern } from '@/lib/domain-expansion'
 
 const requestSchema = z.object({
-  pattern: z.string().min(1)
+  query: z.string().min(1)
 })
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { pattern } = requestSchema.parse(body)
+    const { query } = requestSchema.parse(body)
     
-    const patterns = extractPatterns(pattern)
+    const patterns = extractPatterns(query)
     
     // If no patterns, just validate the domain
     if (patterns.length === 0) {
-      const isValid = validator.isFQDN(pattern, { require_tld: true })
+      const isValid = validator.isFQDN(query, { require_tld: true })
       if (!isValid) {
         return NextResponse.json({ domains: [] })
       }
-      return NextResponse.json({ domains: [pattern] })
+      return NextResponse.json({ domains: [query] })
     }
     
     // Generate options for each pattern
@@ -31,6 +31,7 @@ export async function POST(request: NextRequest) {
       patternResults.push({
         startIndex: p.startIndex,
         endIndex: p.endIndex,
+        pattern: p.pattern,
         options,
       })
     }
@@ -41,7 +42,7 @@ export async function POST(request: NextRequest) {
     }
     
     // Generate all permutations
-    const permutations = generatePermutations(pattern, validPatternResults)
+    const permutations = generatePermutations(query, validPatternResults)
     const validDomains = permutations
       .map((domain) => domain.toLowerCase())
       .filter((domain) => validator.isFQDN(domain, { require_tld: true }))
@@ -49,7 +50,7 @@ export async function POST(request: NextRequest) {
     
     return NextResponse.json({ 
       domains: validDomains,
-      pattern,
+      query,
       patternResults: validPatternResults
     })
     

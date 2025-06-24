@@ -17,13 +17,13 @@ interface DomainResultData {
   isNewBatch?: boolean // marks domains from "Try More"
 }
 
-function validateDomainPattern(pattern: string): { isValid: boolean; error: string | null } {
-  if (!pattern.trim()) {
+function validateDomainQuery(query: string): { isValid: boolean; error: string | null } {
+  if (!query.trim()) {
     return { isValid: true, error: null }
   }
 
   const bracePattern = /\{\{|\}\}/g
-  const matches = pattern.match(bracePattern) || []
+  const matches = query.match(bracePattern) || []
 
   let openCount = 0
   for (const match of matches) {
@@ -42,12 +42,12 @@ function validateDomainPattern(pattern: string): { isValid: boolean; error: stri
   }
 
   // Check for empty patterns
-  const emptyPatternMatch = pattern.match(/\{\{\s*\}\}/)
+  const emptyPatternMatch = query.match(/\{\{\s*\}\}/)
   if (emptyPatternMatch) {
     return { isValid: false, error: "Empty pattern {{}} is not allowed" }
   }
 
-  const outsidePattern = pattern.replace(/\{\{[^}]*\}\}/g, "PLACEHOLDER")
+  const outsidePattern = query.replace(/\{\{[^}]*\}\}/g, "PLACEHOLDER")
   const invalidChars = outsidePattern.match(/[^a-zA-Z0-9.\-PLACEHOLDER]/g)
 
   if (invalidChars) {
@@ -310,7 +310,7 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
           headers: { 
           'Content-Type': 'application/json'
         },
-          body: JSON.stringify({ pattern: searchTerm }),
+          body: JSON.stringify({ query: searchTerm }),
           signal: abortControllerRef.current?.signal
         })
 
@@ -457,8 +457,8 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ 
-          pattern: searchTerm,
-          unavailableDomains: Array.from(allGeneratedDomains), // Send all generated domains to avoid duplicates
+          query: searchTerm,
+          unavailableDomains: Array.from(allGeneratedDomains), // All previously generated domains (to avoid duplicates)
           patternResults 
         }),
         signal: loadMoreAbortController.signal
@@ -470,8 +470,8 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
       
       const data = await response.json()
       
-      // Check if we received a message indicating no more suggestions
-      if (data.message && data.domains.length === 0) {
+      // Check if we received a message indicating no more suggestions OR no domains
+      if (data.message || data.domains.length === 0) {
         // Show message but don't clear existing domains
         setTryMoreLimitReached(true) // Use this to show the message
         setIsLoadingMore(false)
@@ -661,10 +661,10 @@ export default function DomainGenerator() {
     { label: "{{one dictionary word}}.io", value: "{{one dictionary word}}.io" },
   ]
 
-  const validateAndSetSearchTerm = (pattern: string) => {
-    const result = validateDomainPattern(pattern)
+  const validateAndSetSearchTerm = (query: string) => {
+    const result = validateDomainQuery(query)
     setValidation(result)
-    setSearchTerm(pattern)
+    setSearchTerm(query)
   }
 
   return (
@@ -673,7 +673,7 @@ export default function DomainGenerator() {
         <HighlightedInput
           value={searchTerm}
           onChange={validateAndSetSearchTerm}
-          placeholder="Enter domain pattern: example.com or {{get/use}}app.{{com/io}}"
+          placeholder="Enter domain query: example.com or {{get/use}}app.{{com/io}}"
           error={!!validation.error}
         />
         {validation.error && <p className="text-sm text-red-500 font-light">{validation.error}</p>}
