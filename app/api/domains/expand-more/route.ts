@@ -17,6 +17,18 @@ export async function POST(request: NextRequest) {
     
     // Extract patterns from query
     const patterns = extractPatterns(query)
+    
+    // Limit to maximum 4 patterns
+    if (patterns.length > 4) {
+      return NextResponse.json({ 
+        error: 'Too many patterns. Maximum 4 patterns allowed per query.',
+        domains: [], 
+        query, 
+        options: {},
+        message: 'Too many patterns'
+      }, { status: 400 })
+    }
+    
     const allGeneratedDomains = new Set(generatedDomains.map(d => d.toLowerCase()))
     
     // Generate new options for each pattern

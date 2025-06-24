@@ -60,6 +60,15 @@ function validateDomainQuery(query: string): { isValid: boolean; error: string |
     }
   }
 
+  // Check pattern count limit
+  const patternMatches = query.match(/\{\{[^}]*\}\}/g) || []
+  if (patternMatches.length > 4) {
+    return {
+      isValid: false,
+      error: "Too many patterns. Maximum 4 patterns allowed per query.",
+    }
+  }
+
   return { isValid: true, error: null }
 }
 
