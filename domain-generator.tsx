@@ -72,6 +72,7 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
   const [tryMoreLimitReached, setTryMoreLimitReached] = useState(false)
   const [tryMoreRemaining, setTryMoreRemaining] = useState<number | null>(null)
   const [seenAvailableDomains, setSeenAvailableDomains] = useState<Set<string>>(new Set())
+  const [fadingDomains, setFadingDomains] = useState<Set<string>>(new Set())
   const [scrollTrigger, setScrollTrigger] = useState(0)
   const checkingRef = useRef<Set<string>>(new Set())
   const abortControllerRef = useRef<AbortController | null>(null)
@@ -93,16 +94,31 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
         const domain = element.getAttribute('data-domain')
         const isAvailable = element.getAttribute('data-available') === 'true'
         
-        if (domain && isAvailable) {
-          setSeenAvailableDomains(prev => {
+        if (domain && isAvailable && !seenAvailableDomains.has(domain)) {
+          // Start fade animation
+          setFadingDomains(prev => {
             const newSet = new Set(prev)
             newSet.add(domain)
             return newSet
           })
+          
+          // After animation completes, mark as seen
+          setTimeout(() => {
+            setSeenAvailableDomains(prev => {
+              const newSet = new Set(prev)
+              newSet.add(domain)
+              return newSet
+            })
+            setFadingDomains(prev => {
+              const newSet = new Set(prev)
+              newSet.delete(domain)
+              return newSet
+            })
+          }, 2000) // Match the 2s fade animation duration
         }
       }
     })
-  }, [entries])
+  }, [entries, seenAvailableDomains])
 
   // Set up observers for domain elements - using a stable ref
   const observeFunctions = useRef({ observe, unobserve })
@@ -243,6 +259,7 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
       setIsChecking(false)
       setIsExpanding(false)
       setSeenAvailableDomains(new Set())
+      setFadingDomains(new Set())
       return
     }
 
@@ -265,6 +282,7 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
       setTryMoreRemaining(2) // Reset to initial limit
       checkingRef.current.clear()
       setSeenAvailableDomains(new Set())
+      setFadingDomains(new Set())
       
       // Generate a new search ID for this search
       const searchId = `search-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
@@ -524,7 +542,7 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
           
           return (
             <div
-              key={item.domain}
+              key={`${item.domain}-${index}`}
               ref={(el) => setDomainRef(item.domain, el)}
               data-domain={item.domain}
               data-available={item.isAvailable?.toString()}
@@ -534,6 +552,8 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
                 isAvailable={item.isAvailable}
                 isFirstNewBatch={isFirstNewBatch}
                 showNewBatchDivider={index > 0}
+                isHighlighted={item.isAvailable === true && !seenAvailableDomains.has(item.domain)}
+                isFadingOut={fadingDomains.has(item.domain)}
               />
             </div>
           )

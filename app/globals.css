@@ -170,3 +170,20 @@
 .fade-in {
   animation: fadeIn 0.3s ease-out forwards;
 }
+
+@keyframes highlightFade {
+  0% {
+    background-color: rgb(74 222 128 / 0.3);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.highlight-unseen {
+  background-color: rgb(74 222 128 / 0.3);
+}
+
+.highlight-fade-out {
+  animation: highlightFade 2s ease-out forwards;
+}
