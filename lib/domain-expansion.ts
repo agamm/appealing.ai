@@ -29,6 +29,7 @@ Rules:
 - Keep words lowercase
 - When pattern asks for "X words" (e.g., "3 words", "10 words"), generate X individual single words, NOT multi-word phrases, and no spaces in between
 - When pattern mentions "combinations" or "compound", generate both individual words AND compound words (e.g., for xxx/yyy/zzz pattern, include: xxx, yyy, zzz, xxxyyy, xxxzzz, yyyzzz, etc.)
+- When pattern specifies "no more than 2" or similar limits, respect that constraint
 - Otherwise, words/terms are usually not compound words, also they are not TLDs (.com etc.) - unless specifically asked for
 - If user asks for play on words, a play on words return a clever use of word meanings or sounds for humor or effect.
 - When pattern asks for "words similar to <word>" return words similar to <word> but also <word>.
@@ -36,8 +37,8 @@ Rules:
 - If pattern specifies a number (e.g., "10 words"), return exactly that many options
 - Otherwise return max 50 options
 - Unless constrained by pattern, return at least 5 options
-${excludedOptions.length > 0 ? `- DO NOT generate these options that were already tried (use them for inspiration): ${excludedOptions.join(', ')}` : ''}`,
-      prompt: `Generate options for the following pattern: ${pattern}${excludedOptions.length > 0 ? `\n\nDO NOT generate these options (use them for inspiration, and be creative to find other options): ${excludedOptions.join(', ')}` : ''}`,
+${excludedOptions.length > 0 ? `- IMPORTANT: DO NOT return any of these already-used options: ${excludedOptions.join(', ')}\n- Generate DIFFERENT options that are NOT in the list above` : ''}`,
+      prompt: `Generate options for the following pattern: ${pattern}${excludedOptions.length > 0 ? `\n\nIMPORTANT: These options have already been used and must NOT be included in your response:\n${excludedOptions.join(', ')}\n\nGenerate NEW, DIFFERENT options that are NOT in the list above.` : ''}`,
       temperature: 0.9,
       seed: Math.round(Math.random()*100),
       maxTokens: 256,
@@ -46,10 +47,24 @@ ${excludedOptions.length > 0 ? `- DO NOT generate these options that were alread
       }),
     })
 
+    // Check if pattern specifies a limit on compound words
+    const maxCompoundMatch = pattern.match(/no more than (\d+)/i)
+    const maxCompoundParts = maxCompoundMatch ? parseInt(maxCompoundMatch[1]) : null
+    
     return object.options
       .filter((option) => option.trim().length > 0)
       .filter((option) => !option.includes('.')) // Remove any words with dots
       .filter((option) => !option.includes(' ')) // Remove any multi-word phrases
+      .filter((option) => {
+        // If there's a limit on compound parts, check it
+        if (maxCompoundParts && pattern.toLowerCase().includes('compound')) {
+          // Count how many base words might be in this option
+          // This is a heuristic - compound words typically have 6+ chars per part
+          const estimatedParts = Math.ceil(option.length / 6)
+          return estimatedParts <= maxCompoundParts
+        }
+        return true
+      })
       .slice(0, 50)
   } catch {
     console.warn('Failed to generate options for pattern:', pattern)

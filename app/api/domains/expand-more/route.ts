@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
       const allUsedOptions = new Set<string>()
       patternResult.options.forEach(opt => allUsedOptions.add(opt.toLowerCase()))
       
-      // Generate new options once
+      // Generate new options
       const newOptions = await generateOptionsForPattern(
         patternResult.pattern, 
         Array.from(allUsedOptions)
@@ -66,17 +66,8 @@ export async function POST(request: NextRequest) {
       return updated && updated.options.length > original.options.length
     })
     
-    // If no pattern got any new options, we're truly out
-    if (!hasNewOptions) {
-      return NextResponse.json({ 
-        domains: [],
-        query,
-        patternResults: newPatternResults,
-        message: "No more unique domain suggestions available"
-      })
-    }
-    
-    // Generate new permutations
+    // Generate permutations regardless of whether we have new options
+    // We might still have new combinations from existing options
     const permutations = generatePermutations(query, newPatternResults)
     
     const validDomains = permutations
@@ -85,6 +76,16 @@ export async function POST(request: NextRequest) {
       .filter((domain, index, arr) => arr.indexOf(domain) === index)
       .filter((domain) => !allGeneratedDomains.has(domain))
       .slice(0, 50)
+    
+    // If no new options AND no new valid domains, then we're truly out
+    if (!hasNewOptions && validDomains.length === 0) {
+      return NextResponse.json({ 
+        domains: [],
+        query,
+        patternResults: newPatternResults,
+        message: "No more unique domain suggestions available"
+      })
+    }
     
     // Only show "no more suggestions" if we truly couldn't generate any new valid domains
     // and we have no pattern results
