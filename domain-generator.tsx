@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Loader2, Sparkles } from "lucide-react"
 import { extractPatterns } from "@/lib/patterns"
@@ -9,8 +9,9 @@ import { ExamplePatterns } from "@/components/example-patterns"
 import { DomainResult } from "@/components/domain-result"
 import { useRateLimit } from "@/hooks/use-rate-limit"
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer"
-import { useExpandDomains, useCheckDomain, useExpandMoreDomains } from "@/hooks/use-domains"
-import { useQueryClient } from "@tanstack/react-query"
+import { useExpandDomains } from "@/hooks/use-expand-domains"
+import { useExpandMoreDomains } from "@/hooks/use-expand-more-domains"
+import { useCheckDomain } from "@/hooks/use-check-domain"
 
 interface DomainResultData {
   domain: string
@@ -64,13 +65,13 @@ function validateDomainQuery(query: string): { isValid: boolean; error: string |
 
 // Component to handle individual domain checking
 function DomainChecker({ domain, onResult }: { domain: string; onResult: (domain: string, isAvailable: boolean) => void }) {
-  const { data, isSuccess } = useCheckDomain(domain)
+  const { isAvailable } = useCheckDomain(domain)
   
   useEffect(() => {
-    if (isSuccess && data) {
-      onResult(domain, data.isAvailable)
+    if (isAvailable !== null) {
+      onResult(domain, isAvailable)
     }
-  }, [isSuccess, data, domain, onResult])
+  }, [isAvailable, domain, onResult])
   
   return null
 }
@@ -89,7 +90,6 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
   const domainRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const processingDomainsRef = useRef<Set<string>>(new Set())
   const { entries, observe, unobserve } = useIntersectionObserver({ threshold: 0.5 })
-  const queryClient = useQueryClient()
   
   const { 
     checkDailySearchLimit, 
@@ -97,12 +97,19 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
     checkTryMoreLimit, 
     incrementTryMore
   } = useRateLimit()
-
-  // Use React Query for expanding domains
-  const { data: expandData, isLoading: isExpanding, error: expandError } = useExpandDomains(searchTerm, isValid)
   
-  // Use React Query for expanding more domains
-  const expandMoreMutation = useExpandMoreDomains()
+  // Use domain expansion hooks
+  const { 
+    domains: expandedDomains, 
+    options: expandedOptions, 
+    isLoading: isExpanding, 
+    error: expandError 
+  } = useExpandDomains(searchTerm, isValid)
+  
+  const { 
+    expandMore, 
+    isLoading: isExpandingMore 
+  } = useExpandMoreDomains()
 
   // Track when available domains are viewed
   useEffect(() => {
@@ -174,32 +181,21 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
     setDomainsToCheck(prev => prev.filter(d => d !== domain))
   }, [])
 
-  // Reset domains when search term changes
+  // Handle expanded domains from hook
   useEffect(() => {
-    if (!searchTerm.trim()) return
-    
-    // Clear all state when search term changes
-    setDomains([])
-    setAllGeneratedDomains(new Set())
-    setFadingDomains(new Set())
-    setSeenAvailableDomains(new Set())
-    setTryMoreLimitReached(false)
-    setCurrentOptions({})
-    setVisibleCount(100)
-    setDomainsToCheck([])
-  }, [searchTerm])
-
-  // Update domains when initial expand data arrives
-  useEffect(() => {
-    if (expandData?.domains && expandData.domains.length > 0 && domains.length === 0) {
-      const newDomains: DomainResultData[] = expandData.domains.map((domain: string) => ({
+    if (expandedDomains.length > 0) {
+      const newDomains: DomainResultData[] = expandedDomains.map((domain: string) => ({
         domain,
         isAvailable: null
       }))
       
       setDomains(newDomains)
-      setAllGeneratedDomains(new Set(expandData.domains.map((d: string) => d.toLowerCase())))
-      setCurrentOptions(expandData.options || {})
+      setAllGeneratedDomains(new Set(expandedDomains.map((d: string) => d.toLowerCase())))
+      setCurrentOptions(expandedOptions)
+      setFadingDomains(new Set())
+      setSeenAvailableDomains(new Set())
+      setTryMoreLimitReached(false)
+      setVisibleCount(100)
       
       // Generate a new search ID
       const searchId = `search-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
@@ -208,15 +204,28 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
       // Check daily search limit after setting domains
       const { allowed } = checkDailySearchLimit()
       if (allowed) {
-        // Increment daily searches only if allowed
         incrementDailySearches()
       }
       
       // Start checking domains
-      const visibleDomains = newDomains.slice(0, visibleCount)
+      const visibleDomains = newDomains.slice(0, 100)
       setDomainsToCheck(visibleDomains.map(d => d.domain))
     }
-  }, [expandData, domains.length, checkDailySearchLimit, incrementDailySearches, visibleCount])
+  }, [expandedDomains, expandedOptions, checkDailySearchLimit, incrementDailySearches])
+  
+  // Clear state when search term changes
+  useEffect(() => {
+    if (!searchTerm.trim()) {
+      setDomains([])
+      setAllGeneratedDomains(new Set())
+      setFadingDomains(new Set())
+      setSeenAvailableDomains(new Set())
+      setTryMoreLimitReached(false)
+      setCurrentOptions({})
+      setVisibleCount(100)
+      setDomainsToCheck([])
+    }
+  }, [searchTerm])
 
   // Monitor try more limit
   useEffect(() => {
@@ -255,47 +264,45 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
     setTryMoreRemaining(remaining - 1)
     incrementTryMore(currentSearchId)
     
-    expandMoreMutation.mutate({
-      query: searchTerm,
-      generatedDomains: Array.from(allGeneratedDomains),
-      options: currentOptions
-    }, {
-      onSuccess: (data) => {
-        if (data.message || data.domains.length === 0) {
-          setTryMoreLimitReached(true)
-          return
-        }
-        
-        // Merge the new options with current options
-        const mergedOptions = { ...currentOptions }
-        Object.entries(data.options).forEach(([index, newOpts]) => {
-          if (newOpts.length > 0) {
-            mergedOptions[index] = [...(mergedOptions[index] || []), ...newOpts]
-          }
-        })
-        setCurrentOptions(mergedOptions)
-        
-        const batchId = `batch-${Date.now()}`
-        const newDomainResults: DomainResultData[] = data.domains.map((domain: string) => ({
-          domain,
-          isAvailable: null,
-          isNewBatch: true,
-          batchId
-        }))
-        
-        const newDomainsSet = new Set(allGeneratedDomains)
-        data.domains.forEach((domain: string) => newDomainsSet.add(domain.toLowerCase()))
-        setAllGeneratedDomains(newDomainsSet)
-        
-        setDomains(prev => [...prev, ...newDomainResults])
-        
-        // Increase visible count to show all domains including new ones
-        setVisibleCount(prev => prev + data.domains.length)
-        
-        // Start checking new domains
-        setDomainsToCheck(prev => [...prev, ...data.domains])
+    const handleExpandMore = async () => {
+      const data = await expandMore(searchTerm, Array.from(allGeneratedDomains), currentOptions)
+      
+      if (!data || data.message || data.domains.length === 0) {
+        setTryMoreLimitReached(true)
+        return
       }
-    })
+      
+      // Merge the new options with current options
+      const mergedOptions = { ...currentOptions }
+      Object.entries(data.options).forEach(([index, newOpts]) => {
+        if (newOpts.length > 0) {
+          mergedOptions[index] = [...(mergedOptions[index] || []), ...newOpts]
+        }
+      })
+      setCurrentOptions(mergedOptions)
+      
+      const batchId = `batch-${Date.now()}`
+      const newDomainResults: DomainResultData[] = data.domains.map((domain: string) => ({
+        domain,
+        isAvailable: null,
+        isNewBatch: true,
+        batchId
+      }))
+      
+      const newDomainsSet = new Set(allGeneratedDomains)
+      data.domains.forEach((domain: string) => newDomainsSet.add(domain.toLowerCase()))
+      setAllGeneratedDomains(newDomainsSet)
+      
+      setDomains(prev => [...prev, ...newDomainResults])
+      
+      // Increase visible count to show all domains including new ones
+      setVisibleCount(prev => prev + data.domains.length)
+      
+      // Start checking new domains
+      setDomainsToCheck(prev => [...prev, ...data.domains])
+    }
+    
+    handleExpandMore()
   }
 
   const visibleDomains = domains.slice(0, visibleCount)
@@ -392,13 +399,13 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
       </div>
 
       {/* Try More button */}
-      {domains.length > 0 && extractPatterns(searchTerm).length > 0 && !expandMoreMutation.isPending && !isChecking && !hasMore && !tryMoreLimitReached && (
+      {domains.length > 0 && extractPatterns(searchTerm).length > 0 && !isExpandingMore && !isChecking && !hasMore && !tryMoreLimitReached && (
         <div className="flex flex-col items-center pt-6 space-y-2">
           <Button 
             onClick={loadMoreDomains}
             className="font-light cursor-pointer"
             variant="default"
-            disabled={expandMoreMutation.isPending}
+            disabled={isExpandingMore}
           >
             <Sparkles className="w-3.5 h-3.5 mr-1.5 opacity-70" />
             Try More Suggestions
@@ -409,15 +416,15 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
         </div>
       )}
 
-      {expandMoreMutation.isPending && (
+      {isExpandingMore && (
         <div className="text-center text-sm text-gray-500 pt-4 font-light">
           <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
-          Generating more suggestions based on unavailable domains...
+          Generating more suggestions...
         </div>
       )}
 
       {/* Show message when try more limit is reached */}
-      {domains.length > 0 && extractPatterns(searchTerm).length > 0 && !expandMoreMutation.isPending && !isChecking && !hasMore && tryMoreLimitReached && (
+      {domains.length > 0 && extractPatterns(searchTerm).length > 0 && !isExpandingMore && !isChecking && !hasMore && tryMoreLimitReached && (
         <div className="text-center text-sm text-gray-400 pt-6 font-light">
           No more unique domain suggestions available
         </div>
