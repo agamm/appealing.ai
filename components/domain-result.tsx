@@ -1,4 +1,4 @@
-import { CheckCircle, XCircle, ExternalLink } from "lucide-react"
+import { CheckCircle, XCircle } from "lucide-react"
 import Image from "next/image"
 
 interface DomainResultProps {
