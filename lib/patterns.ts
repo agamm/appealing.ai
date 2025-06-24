@@ -33,22 +33,34 @@ export function cartesianProduct<T>(...arrays: T[][]): T[][] {
 }
 
 export function generatePermutations(
-  template: string,
-  patternResults: { startIndex: number; endIndex: number; options: string[] }[],
+  query: string,
+  options: Record<string, string[]>, // options by index: {"0": ["opt1", "opt2"], "1": ["opt3", "opt4"]}
 ): string[] {
-  if (patternResults.length === 0) {
-    return [template]
+  // Extract all patterns from query in order
+  const patterns = extractPatterns(query)
+  
+  if (patterns.length === 0) {
+    return [query]
   }
 
-  const sortedPatterns = [...patternResults].sort((a, b) => a.startIndex - b.startIndex)
-  const optionArrays = sortedPatterns.map((p) => p.options)
+  // Build arrays of options in the same order as patterns appear
+  const optionArrays: string[][] = []
+  for (let i = 0; i < patterns.length; i++) {
+    const opts = options[i.toString()]
+    if (!opts || opts.length === 0) {
+      // If no options for this pattern, skip this pattern entirely
+      return []
+    }
+    optionArrays.push(opts)
+  }
+
   const combinations = cartesianProduct(...optionArrays)
 
   return combinations.map((combination) => {
-    let result = template
+    let result = query
     let offset = 0
 
-    sortedPatterns.forEach((pattern, index) => {
+    patterns.forEach((pattern, index) => {
       const replacement = combination[index]
       const adjustedStart = pattern.startIndex + offset
       const adjustedEnd = pattern.endIndex + offset

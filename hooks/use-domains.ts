@@ -1,5 +1,5 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { expandDomains, checkDomainAvailability, expandMoreDomains, type ExpandResponse } from '@/lib/api'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { expandDomains, checkDomainAvailability, expandMoreDomains } from '@/lib/api'
 
 // Hook for expanding domains
 export function useExpandDomains(query: string, enabled: boolean = true) {
@@ -24,22 +24,8 @@ export function useCheckDomain(domain: string, enabled: boolean = true) {
 
 // Hook for expanding more domains
 export function useExpandMoreDomains() {
-  const queryClient = useQueryClient()
-  
   return useMutation({
     mutationFn: expandMoreDomains,
-    onSuccess: (data, variables) => {
-      // Update the cache with new pattern results
-      queryClient.setQueryData(
-        ['domains', 'expand', variables.query],
-        (oldData: ExpandResponse | undefined) => {
-          if (!oldData) return data
-          return {
-            ...oldData,
-            patternResults: data.patternResults,
-          }
-        }
-      )
-    },
+    // Don't update the cache - let the component handle the response directly
   })
 }

@@ -37,7 +37,7 @@ Rules:
 - If pattern specifies a number (e.g., "10 words"), return exactly that many options
 - Otherwise return max 50 options
 - Unless constrained by pattern, return at least 5 options
-${excludedOptions.length > 0 ? `- IMPORTANT: DO NOT return any of these already-used options: ${excludedOptions.join(', ')}\n- Generate DIFFERENT options that are NOT in the list above` : ''}`,
+${excludedOptions.length > 0 ? `- IMPORTANT: DO NOT return any of these already-used options: ${excludedOptions.join(', ')}\n- Generate new DIFFERENT options that are NOT in the list above` : ''}`,
       prompt: `Generate options for the following pattern: ${pattern}${excludedOptions.length > 0 ? `\n\nIMPORTANT: These options have already been used and must NOT be included in your response:\n${excludedOptions.join(', ')}\n\nGenerate NEW, DIFFERENT options that are NOT in the list above.` : ''}`,
       temperature: 0.9,
       seed: Math.round(Math.random()*100),

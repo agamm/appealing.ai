@@ -3,12 +3,7 @@
 export interface ExpandResponse {
   domains: string[]
   query: string
-  patternResults: Array<{
-    startIndex: number
-    endIndex: number
-    pattern: string
-    options: string[]
-  }>
+  options: Record<string, string[]>
 }
 
 export interface CheckResponse {
@@ -53,8 +48,8 @@ export async function checkDomainAvailability(domain: string): Promise<CheckResp
 // Expand more domains API
 export async function expandMoreDomains(params: {
   query: string
-  unavailableDomains: string[]
-  patternResults: ExpandResponse['patternResults']
+  generatedDomains: string[]
+  options: Record<string, string[]>
 }): Promise<ExpandMoreResponse> {
   const response = await fetch('/api/domains/expand-more', {
     method: 'POST',

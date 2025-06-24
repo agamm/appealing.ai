@@ -1,74 +1,61 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import validator from 'validator'
-import { generatePermutations } from '@/lib/patterns'
+import { generatePermutations, extractPatterns } from '@/lib/patterns'
 import { generateOptionsForPattern } from '@/lib/domain-expansion'
 
 const requestSchema = z.object({
   query: z.string().min(1),
-  unavailableDomains: z.array(z.string()), // Actually all previously generated domains to avoid duplicates
-  patternResults: z.array(z.object({
-    startIndex: z.number(),
-    endIndex: z.number(),
-    pattern: z.string(),
-    options: z.array(z.string())
-  }))
+  generatedDomains: z.array(z.string()), // All previously generated domains to avoid duplicates
+  options: z.record(z.array(z.string())) // Options by index: {"0": ["opt1", "opt2"], "1": ["opt3", "opt4"]}
 })
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { query, unavailableDomains, patternResults } = requestSchema.parse(body)
+    const { query, generatedDomains, options: previousOptions } = requestSchema.parse(body)
     
-    // Generate new options for each pattern, accumulating all previously used options
-    const newPatternResults: typeof patternResults = []
-    const allGeneratedDomains = new Set(unavailableDomains.map(d => d.toLowerCase()))
+    // Extract patterns from query
+    const patterns = extractPatterns(query)
+    const allGeneratedDomains = new Set(generatedDomains.map(d => d.toLowerCase()))
     
-    for (const patternResult of patternResults) {
-      // Get all previously used options
-      const allUsedOptions = new Set<string>()
-      patternResult.options.forEach(opt => allUsedOptions.add(opt.toLowerCase()))
+    // Generate new options for each pattern
+    const newOptions: Record<string, string[]> = {}
+    const combinedOptions: Record<string, string[]> = {}
+    let hasNewOptions = false
+    
+    for (let i = 0; i < patterns.length; i++) {
+      const index = i.toString()
+      const previousOpts = previousOptions[index] || []
+      const allUsedOptions = new Set(previousOpts.map(opt => opt.toLowerCase()))
       
-      // Generate new options
-      const newOptions = await generateOptionsForPattern(
-        patternResult.pattern, 
+      // Generate new options excluding previously used ones
+      const freshOptions = await generateOptionsForPattern(
+        patterns[i].pattern, 
         Array.from(allUsedOptions)
       )
       
       // Filter to only truly new options
-      const freshOptions = newOptions.filter(opt => 
+      const uniqueFreshOptions = freshOptions.filter(opt => 
         !allUsedOptions.has(opt.toLowerCase())
       )
       
-      if (freshOptions.length > 0) {
-        // Found new options - include all options (old + new)
-        newPatternResults.push({
-          startIndex: patternResult.startIndex,
-          endIndex: patternResult.endIndex,
-          pattern: patternResult.pattern,
-          options: [...patternResult.options, ...freshOptions]
-        })
+      if (uniqueFreshOptions.length > 0) {
+        // Store only the new options to return
+        newOptions[index] = uniqueFreshOptions
+        // Store combined options for permutation generation
+        combinedOptions[index] = [...previousOpts, ...uniqueFreshOptions]
+        hasNewOptions = true
       } else {
-        // No new options for this pattern, but we still need it for permutations
-        // Just use the existing options
-        newPatternResults.push({
-          startIndex: patternResult.startIndex,
-          endIndex: patternResult.endIndex,
-          pattern: patternResult.pattern,
-          options: patternResult.options
-        })
+        // No new options for this pattern - return empty array
+        newOptions[index] = []
+        // Keep existing options for permutation generation
+        combinedOptions[index] = previousOpts
       }
     }
     
-    // Check if any pattern got new options
-    const hasNewOptions = patternResults.some((original, index) => {
-      const updated = newPatternResults[index]
-      return updated && updated.options.length > original.options.length
-    })
-    
-    // Generate permutations regardless of whether we have new options
-    // We might still have new combinations from existing options
-    const permutations = generatePermutations(query, newPatternResults)
+    // Generate permutations with the combined options (old + new)
+    const permutations = generatePermutations(query, combinedOptions)
     
     const validDomains = permutations
       .map((domain) => domain.toLowerCase())
@@ -82,27 +69,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ 
         domains: [],
         query,
-        patternResults: newPatternResults,
+        options: newOptions, // Return empty new options
         message: "No more unique domain suggestions available"
       })
     }
     
-    // Only show "no more suggestions" if we truly couldn't generate any new valid domains
-    // and we have no pattern results
-    if (validDomains.length === 0 && newPatternResults.length === 0) {
-      return NextResponse.json({ 
-        domains: [],
-        query,
-        patternResults: [],
-        message: "No more unique domain suggestions available"
-      })
-    }
-    
-    // Return the domains and updated pattern results
+    // Return the domains and only the NEW options
     return NextResponse.json({ 
       domains: validDomains,
       query,
-      patternResults: newPatternResults
+      options: newOptions
     })
     
   } catch (error) {

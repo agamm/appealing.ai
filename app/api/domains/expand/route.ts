@@ -19,30 +19,27 @@ export async function POST(request: NextRequest) {
     if (patterns.length === 0) {
       const isValid = validator.isFQDN(query, { require_tld: true })
       if (!isValid) {
-        return NextResponse.json({ domains: [] })
+        return NextResponse.json({ domains: [], query, options: {} })
       }
-      return NextResponse.json({ domains: [query] })
+      return NextResponse.json({ domains: [query], query, options: {} })
     }
     
-    // Generate options for each pattern
-    const patternResults = []
-    for (const p of patterns) {
-      const options = await generateOptionsForPattern(p.pattern, [])
-      patternResults.push({
-        startIndex: p.startIndex,
-        endIndex: p.endIndex,
-        pattern: p.pattern,
-        options,
-      })
+    // Generate options for each pattern by index
+    const options: Record<string, string[]> = {}
+    
+    for (let i = 0; i < patterns.length; i++) {
+      const patternOptions = await generateOptionsForPattern(patterns[i].pattern, [])
+      if (patternOptions.length > 0) {
+        options[i.toString()] = patternOptions
+      }
     }
     
-    const validPatternResults = patternResults.filter((p) => p.options.length > 0)
-    if (validPatternResults.length === 0) {
-      return NextResponse.json({ domains: [] })
+    if (Object.keys(options).length === 0) {
+      return NextResponse.json({ domains: [], query, options: {} })
     }
     
     // Generate all permutations
-    const permutations = generatePermutations(query, validPatternResults)
+    const permutations = generatePermutations(query, options)
     const validDomains = permutations
       .map((domain) => domain.toLowerCase())
       .filter((domain) => validator.isFQDN(domain, { require_tld: true }))
@@ -51,7 +48,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ 
       domains: validDomains,
       query,
-      patternResults: validPatternResults
+      options
     })
     
   } catch {

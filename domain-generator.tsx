@@ -16,6 +16,7 @@ interface DomainResultData {
   domain: string
   isAvailable: boolean | null
   isNewBatch?: boolean
+  batchId?: string
 }
 
 function validateDomainQuery(query: string): { isValid: boolean; error: string | null } {
@@ -84,6 +85,7 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
   const [fadingDomains, setFadingDomains] = useState<Set<string>>(new Set())
   const [allGeneratedDomains, setAllGeneratedDomains] = useState<Set<string>>(new Set())
   const [domainsToCheck, setDomainsToCheck] = useState<string[]>([])
+  const [currentOptions, setCurrentOptions] = useState<Record<string, string[]>>({})
   const domainRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const processingDomainsRef = useRef<Set<string>>(new Set())
   const { entries, observe, unobserve } = useIntersectionObserver({ threshold: 0.5 })
@@ -172,9 +174,24 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
     setDomainsToCheck(prev => prev.filter(d => d !== domain))
   }, [])
 
-  // Update domains when expand data changes
+  // Reset domains when search term changes
   useEffect(() => {
-    if (expandData?.domains && expandData.domains.length > 0) {
+    if (!searchTerm.trim()) return
+    
+    // Clear all state when search term changes
+    setDomains([])
+    setAllGeneratedDomains(new Set())
+    setFadingDomains(new Set())
+    setSeenAvailableDomains(new Set())
+    setTryMoreLimitReached(false)
+    setCurrentOptions({})
+    setVisibleCount(100)
+    setDomainsToCheck([])
+  }, [searchTerm])
+
+  // Update domains when initial expand data arrives
+  useEffect(() => {
+    if (expandData?.domains && expandData.domains.length > 0 && domains.length === 0) {
       const newDomains: DomainResultData[] = expandData.domains.map((domain: string) => ({
         domain,
         isAvailable: null
@@ -182,9 +199,7 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
       
       setDomains(newDomains)
       setAllGeneratedDomains(new Set(expandData.domains.map((d: string) => d.toLowerCase())))
-      setFadingDomains(new Set())
-      setSeenAvailableDomains(new Set())
-      setTryMoreLimitReached(false)
+      setCurrentOptions(expandData.options || {})
       
       // Generate a new search ID
       const searchId = `search-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
@@ -201,7 +216,7 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
       const visibleDomains = newDomains.slice(0, visibleCount)
       setDomainsToCheck(visibleDomains.map(d => d.domain))
     }
-  }, [expandData, checkDailySearchLimit, incrementDailySearches, visibleCount])
+  }, [expandData, domains.length, checkDailySearchLimit, incrementDailySearches, visibleCount])
 
   // Monitor try more limit
   useEffect(() => {
@@ -229,7 +244,7 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
 
   // Load more domains handler
   const loadMoreDomains = async () => {
-    if (!currentSearchId || !expandData) return
+    if (!currentSearchId) return
     
     const { allowed, remaining } = checkTryMoreLimit(currentSearchId)
     if (!allowed) {
@@ -242,8 +257,8 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
     
     expandMoreMutation.mutate({
       query: searchTerm,
-      unavailableDomains: Array.from(allGeneratedDomains),
-      patternResults: expandData.patternResults
+      generatedDomains: Array.from(allGeneratedDomains),
+      options: currentOptions
     }, {
       onSuccess: (data) => {
         if (data.message || data.domains.length === 0) {
@@ -251,10 +266,21 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
           return
         }
         
+        // Merge the new options with current options
+        const mergedOptions = { ...currentOptions }
+        Object.entries(data.options).forEach(([index, newOpts]) => {
+          if (newOpts.length > 0) {
+            mergedOptions[index] = [...(mergedOptions[index] || []), ...newOpts]
+          }
+        })
+        setCurrentOptions(mergedOptions)
+        
+        const batchId = `batch-${Date.now()}`
         const newDomainResults: DomainResultData[] = data.domains.map((domain: string) => ({
           domain,
           isAvailable: null,
-          isNewBatch: true
+          isNewBatch: true,
+          batchId
         }))
         
         const newDomainsSet = new Set(allGeneratedDomains)
@@ -262,6 +288,9 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
         setAllGeneratedDomains(newDomainsSet)
         
         setDomains(prev => [...prev, ...newDomainResults])
+        
+        // Increase visible count to show all domains including new ones
+        setVisibleCount(prev => prev + data.domains.length)
         
         // Start checking new domains
         setDomainsToCheck(prev => [...prev, ...data.domains])
@@ -312,8 +341,9 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
     <div className="space-y-4">
       <div className="space-y-1">
         {visibleDomains.map((item, index) => {
-          const isFirstNewBatch = item.isNewBatch && 
-            (index === 0 || !visibleDomains[index - 1].isNewBatch)
+          const previousItem = index > 0 ? visibleDomains[index - 1] : null
+          const isFirstInBatch = item.isNewBatch && 
+            (!previousItem || previousItem.batchId !== item.batchId)
           
           return (
             <div
@@ -325,8 +355,8 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
               <DomainResult
                 domain={item.domain}
                 isAvailable={item.isAvailable}
-                isFirstNewBatch={isFirstNewBatch}
-                showNewBatchDivider={index > 0}
+                isFirstNewBatch={isFirstInBatch}
+                showNewBatchDivider={isFirstInBatch}
                 isHighlighted={item.isAvailable === true && !seenAvailableDomains.has(item.domain)}
                 isFadingOut={fadingDomains.has(item.domain)}
               />

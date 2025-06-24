@@ -203,7 +203,11 @@ describe('Domain Expansion with Real AI', () => {
       expect(patternResults[1].options).toHaveLength(11)
       
       // Generate all permutations
-      const permutations = generatePermutations(pattern, patternResults)
+      const options: Record<string, string[]> = {}
+      patternResults.forEach((result, index) => {
+        options[index.toString()] = result.options
+      })
+      const permutations = generatePermutations(pattern, options)
       
       console.log('Total permutations:', permutations.length)
       console.log('Sample permutations:', permutations.slice(0, 5))
@@ -266,7 +270,11 @@ describe('Domain Expansion with Real AI', () => {
       })
       
       // Generate permutations
-      const permutations = generatePermutations(pattern, patternResults)
+      const options: Record<string, string[]> = {}
+      patternResults.forEach((result, index) => {
+        options[index.toString()] = result.options
+      })
+      const permutations = generatePermutations(pattern, options)
       // Should generate many permutations (options1.length x options2.length)
       const expectedCount = patternResults[0].options.length * patternResults[1].options.length
       expect(permutations).toHaveLength(expectedCount)

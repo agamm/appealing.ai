@@ -125,99 +125,59 @@ describe("Utility Functions", () => {
 
   describe("generatePermutations", () => {
     it("should generate permutations with single pattern", () => {
-      const template = "{{pattern}}app.com"
-      const patternResults = [
-        {
-          startIndex: 0,
-          endIndex: 11,
-          options: ["get", "use"],
-        },
-      ]
-      const result = generatePermutations(template, patternResults)
+      const query = "{{pattern}}app.com"
+      const options = {
+        "0": ["get", "use"]
+      }
+      const result = generatePermutations(query, options)
       expect(result).toEqual(["getapp.com", "useapp.com"])
     })
 
     it("should generate permutations with multiple patterns", () => {
-      const template = "{{prefix}}thing.{{tld}}"
-      const patternResults = [
-        {
-          startIndex: 0,
-          endIndex: 10,
-          options: ["get", "use"],
-        },
-        {
-          startIndex: 16,
-          endIndex: 23,
-          options: ["com", "io"],
-        },
-      ]
-      const result = generatePermutations(template, patternResults)
+      const query = "{{prefix}}thing.{{tld}}"
+      const options = {
+        "0": ["get", "use"],
+        "1": ["com", "io"]
+      }
+      const result = generatePermutations(query, options)
       expect(result).toEqual(["getthing.com", "getthing.io", "usething.com", "usething.io"])
     })
 
     it("should handle no patterns", () => {
-      const template = "example.com"
-      const patternResults: { startIndex: number; endIndex: number; options: string[] }[] = []
-      const result = generatePermutations(template, patternResults)
+      const query = "example.com"
+      const options = {}
+      const result = generatePermutations(query, options)
       expect(result).toEqual(["example.com"])
     })
 
     it("should handle patterns with different option counts", () => {
-      const template = "{{a}}{{b}}.com"
-      const patternResults = [
-        {
-          startIndex: 0,
-          endIndex: 5,
-          options: ["x", "y", "z"],
-        },
-        {
-          startIndex: 5,
-          endIndex: 10,
-          options: ["1", "2"],
-        },
-      ]
-      const result = generatePermutations(template, patternResults)
+      const query = "{{a}}{{b}}.com"
+      const options = {
+        "0": ["x", "y", "z"],
+        "1": ["1", "2"]
+      }
+      const result = generatePermutations(query, options)
       expect(result).toEqual(["x1.com", "x2.com", "y1.com", "y2.com", "z1.com", "z2.com"])
     })
 
     it("should handle patterns with single options", () => {
-      const template = "{{single}}app.com"
-      const patternResults = [
-        {
-          startIndex: 0,
-          endIndex: 10,
-          options: ["only"],
-        },
-      ]
-      const result = generatePermutations(template, patternResults)
+      const query = "{{single}}app.com"
+      const options = {
+        "0": ["only"]
+      }
+      const result = generatePermutations(query, options)
       expect(result).toEqual(["onlyapp.com"])
     })
 
     it("should handle complex template with multiple patterns", () => {
-      const template = "{{pre}}{{mid}}{{post}}.{{ext}}"
-      const patternResults = [
-        {
-          startIndex: 0,
-          endIndex: 7,
-          options: ["a", "b"],
-        },
-        {
-          startIndex: 7,
-          endIndex: 14,
-          options: ["x"],
-        },
-        {
-          startIndex: 14,
-          endIndex: 22,
-          options: ["1", "2"],
-        },
-        {
-          startIndex: 23,
-          endIndex: 30,
-          options: ["com"],
-        },
-      ]
-      const result = generatePermutations(template, patternResults)
+      const query = "{{pre}}{{mid}}{{post}}.{{ext}}"
+      const options = {
+        "0": ["a", "b"],
+        "1": ["x"],
+        "2": ["1", "2"],
+        "3": ["com"]
+      }
+      const result = generatePermutations(query, options)
       expect(result).toEqual(["ax1.com", "ax2.com", "bx1.com", "bx2.com"])
     })
   })
