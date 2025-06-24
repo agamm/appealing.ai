@@ -1,4 +1,4 @@
-import { CheckCircle, XCircle } from "lucide-react"
+import { CheckCircle, XCircle, Plus, ExternalLink } from "lucide-react"
 import Image from "next/image"
 
 interface DomainResultProps {
@@ -8,6 +8,9 @@ interface DomainResultProps {
   showNewBatchDivider?: boolean
   isHighlighted?: boolean
   isFadingOut?: boolean
+  onSave?: (domain: string) => void
+  isSaved?: boolean
+  isFromSaved?: boolean
 }
 
 export function DomainResult({ 
@@ -16,17 +19,11 @@ export function DomainResult({
   isFirstNewBatch, 
   showNewBatchDivider,
   isHighlighted = false,
-  isFadingOut = false
+  isFadingOut = false,
+  onSave,
+  isSaved = false,
+  isFromSaved = false
 }: DomainResultProps) {
-  const handleClick = () => {
-    if (isAvailable === false) {
-      // Open domain in new tab if taken
-      window.open(`https://${domain}`, '_blank')
-    } else {
-      // Copy to clipboard if available
-      navigator.clipboard.writeText(domain)
-    }
-  }
 
   const registrars = [
     {
@@ -57,23 +54,37 @@ export function DomainResult({
       {showNewBatchDivider && isFirstNewBatch && (
         <div className="flex items-center gap-3 py-3">
           <div className="flex-1 h-px bg-gray-200"></div>
-          <span className="text-xs text-gray-400 font-light">New suggestions</span>
+          <span className="text-xs text-gray-400 font-light">
+            {isFromSaved ? 'New suggestions from saved' : 'New suggestions'}
+          </span>
           <div className="flex-1 h-px bg-gray-200"></div>
         </div>
       )}
       <div
-        className={`px-4 py-2.5 text-gray-600 hover:bg-gray-50 rounded-md transition-colors duration-150 border border-transparent hover:border-gray-200 font-light ${
+        className={`group px-4 py-2.5 text-gray-600 hover:bg-gray-50 rounded-md transition-colors duration-150 border border-transparent hover:border-gray-200 font-light relative ${
           isHighlighted && !isFadingOut ? 'highlight-unseen' : ''
-        } ${isFadingOut ? 'highlight-fade-out' : ''}`}
+        } ${isFadingOut ? 'highlight-fade-out' : ''} ${isSaved ? 'bg-blue-50 border-blue-200' : ''}`}
       >
         <div className="flex items-center justify-between">
-          <span 
-            className={`cursor-pointer ${isAvailable === false ? 'text-gray-400 underline' : 'text-gray-700'}`}
-            onClick={handleClick}
-            title={isAvailable === false ? "Click to visit" : "Click to copy"}
-          >
-            {domain}
-          </span>
+          <div className="flex items-center gap-2">
+            {onSave && !isSaved && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onSave(domain)
+                }}
+                className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-all duration-150 hover:bg-gray-100 rounded flex items-center justify-center"
+                title="Save domain"
+              >
+                <Plus className="w-3.5 h-3.5 text-gray-500" />
+              </button>
+            )}
+            <span 
+              className={`${isAvailable === false ? 'text-gray-400' : 'text-gray-700'} ${isSaved ? 'text-blue-700' : ''}`}
+            >
+              {domain}
+            </span>
+          </div>
           {isAvailable === null ? (
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1">
@@ -107,13 +118,25 @@ export function DomainResult({
               </div>
               <div className="flex items-center gap-1 text-green-600">
                 <CheckCircle className="w-4 h-4" />
-                <span className="text-xs font-normal">Available</span>
+                <span className="text-xs font-normal">{isSaved ? 'Saved' : 'Available'}</span>
               </div>
             </div>
           ) : (
-            <div className="flex items-center gap-1 text-red-500">
-              <XCircle className="w-4 h-4" />
-              <span className="text-xs font-normal">Taken</span>
+            <div className="flex items-center gap-3">
+              <a
+                href={`https://${domain}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center opacity-60 hover:opacity-100 transition-opacity"
+                title="Visit domain"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+              <div className="flex items-center gap-1 text-red-500">
+                <XCircle className="w-4 h-4" />
+                <span className="text-xs font-normal">{isSaved ? 'Saved (Taken)' : 'Taken'}</span>
+              </div>
             </div>
           )}
         </div>

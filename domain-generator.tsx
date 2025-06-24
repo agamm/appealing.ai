@@ -10,11 +10,14 @@ import { DomainResult } from "@/components/domain-result"
 import { useRateLimit } from "@/hooks/use-rate-limit"
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer"
 import { UnseenDomainsIndicator } from "@/components/unseen-domains-indicator"
+import { SavedDomains } from "@/components/saved-domains"
+import { useSavedDomains } from "@/hooks/use-saved-domains"
 
 interface DomainResultData {
   domain: string
   isAvailable: boolean | null // null means checking
   isNewBatch?: boolean // marks domains from "Try More"
+  isFromSaved?: boolean // marks domains from saved domains expansion
 }
 
 function validateDomainPattern(pattern: string): { isValid: boolean; error: string | null } {
@@ -61,7 +64,16 @@ function validateDomainPattern(pattern: string): { isValid: boolean; error: stri
   return { isValid: true, error: null }
 }
 
-function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: boolean }) {
+interface DomainListProps {
+  searchTerm: string
+  isValid: boolean
+  savedDomains: string[]
+  onSaveDomain: (domain: string) => void
+  expandedDomains?: DomainResultData[]
+  onExpandedDomainsUsed?: () => void
+}
+
+function DomainList({ searchTerm, isValid, savedDomains, onSaveDomain, expandedDomains = [], onExpandedDomainsUsed }: DomainListProps) {
   const [domains, setDomains] = useState<DomainResultData[]>([])
   const [isExpanding, setIsExpanding] = useState(false)
   const [isChecking, setIsChecking] = useState(false)
@@ -89,36 +101,44 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
 
   // Track when available domains are viewed
   useEffect(() => {
+    const domainsToFade = new Set<string>()
+    
     entries.forEach((entry, element) => {
       if (entry.isIntersecting) {
         const domain = element.getAttribute('data-domain')
         const isAvailable = element.getAttribute('data-available') === 'true'
         
-        if (domain && isAvailable && !seenAvailableDomains.has(domain)) {
-          // Start fade animation
-          setFadingDomains(prev => {
+        if (domain && isAvailable && !seenAvailableDomains.has(domain) && !fadingDomains.has(domain)) {
+          domainsToFade.add(domain)
+        }
+      }
+    })
+    
+    if (domainsToFade.size > 0) {
+      // Start fade animation
+      setFadingDomains(prev => {
+        const newSet = new Set(prev)
+        domainsToFade.forEach(domain => newSet.add(domain))
+        return newSet
+      })
+      
+      // After animation completes, mark as seen
+      domainsToFade.forEach(domain => {
+        setTimeout(() => {
+          setSeenAvailableDomains(prev => {
             const newSet = new Set(prev)
             newSet.add(domain)
             return newSet
           })
-          
-          // After animation completes, mark as seen
-          setTimeout(() => {
-            setSeenAvailableDomains(prev => {
-              const newSet = new Set(prev)
-              newSet.add(domain)
-              return newSet
-            })
-            setFadingDomains(prev => {
-              const newSet = new Set(prev)
-              newSet.delete(domain)
-              return newSet
-            })
-          }, 2000) // Match the 2s fade animation duration
-        }
-      }
-    })
-  }, [entries, seenAvailableDomains])
+          setFadingDomains(prev => {
+            const newSet = new Set(prev)
+            newSet.delete(domain)
+            return newSet
+          })
+        }, 2000) // Match the 2s fade animation duration
+      })
+    }
+  }, [entries.length]) // Only re-run when number of entries changes
 
   // Set up observers for domain elements - using a stable ref
   const observeFunctions = useRef({ observe, unobserve })
@@ -200,6 +220,8 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
     }
   }
 
+
+
   // Check domain availability
   const checkDomain = useCallback(async (domain: string) => {
     if (checkingRef.current.has(domain)) return
@@ -250,16 +272,37 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
     }
   }
 
+  // Handle expanded domains from saved
+  useEffect(() => {
+    if (expandedDomains.length > 0) {
+      // Append expanded domains to existing ones
+      setDomains(prev => [...prev, ...expandedDomains])
+      setIsChecking(false)
+      setIsExpanding(false)
+      setError(null)
+      // Update visible count to show all domains
+      setVisibleCount(prev => prev + expandedDomains.length)
+      
+      // Clear expanded domains after use to prevent re-adding
+      if (onExpandedDomainsUsed) {
+        onExpandedDomainsUsed()
+      }
+    }
+  }, [expandedDomains, onExpandedDomainsUsed])
+
   useEffect(() => {
     // Abort all ongoing checks when search term changes
     abortAllChecks()
     
     if (!searchTerm.trim() || !isValid) {
-      setDomains([])
-      setIsChecking(false)
-      setIsExpanding(false)
-      setSeenAvailableDomains(new Set())
-      setFadingDomains(new Set())
+      // Only clear if we don't have expanded domains to show
+      if (domains.length === 0 || !domains.some(d => d.isFromSaved)) {
+        setDomains([])
+        setIsChecking(false)
+        setIsExpanding(false)
+        setSeenAvailableDomains(new Set())
+        setFadingDomains(new Set())
+      }
       return
     }
 
@@ -473,7 +516,9 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
   const checkedCount = domains.filter(d => d.isAvailable !== null).length
   const availableCount = domains.filter(d => d.isAvailable === true).length
 
-  if (!searchTerm.trim() || !isValid) return null
+  // Show results if we have a search term OR if we have domains from expansion
+  if (!searchTerm.trim() && domains.length === 0) return null
+  if (!isValid && domains.length === 0) return null
 
   if (isExpanding) {
     return (
@@ -538,7 +583,7 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
       <div className="space-y-1">
         {visibleDomains.map((item, index) => {
           const isFirstNewBatch = item.isNewBatch && 
-            (index === 0 || !visibleDomains[index - 1].isNewBatch)
+            (index === 0 || !visibleDomains[index - 1]?.isNewBatch)
           
           return (
             <div
@@ -554,6 +599,9 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
                 showNewBatchDivider={index > 0}
                 isHighlighted={item.isAvailable === true && !seenAvailableDomains.has(item.domain)}
                 isFadingOut={fadingDomains.has(item.domain)}
+                onSave={onSaveDomain}
+                isSaved={savedDomains.includes(item.domain)}
+                isFromSaved={item.isFromSaved}
               />
             </div>
           )
@@ -618,6 +666,51 @@ export default function DomainGenerator() {
     isValid: true,
     error: null,
   })
+  const { savedDomains, addDomain: addSavedDomain, removeDomain: removeSavedDomain } = useSavedDomains()
+  const [expandedDomains, setExpandedDomains] = useState<DomainResultData[]>([])
+  const [isExpandingSaved, setIsExpandingSaved] = useState(false)
+
+  const handleExpandSavedDomains = useCallback(async (domainsToExpand: string[]) => {
+    setIsExpandingSaved(true)
+    
+    try {
+      const response = await fetch('/api/domains/similar', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+          savedDomains: domainsToExpand,
+          pattern: searchTerm || null // Pass null if no search term
+        })
+      })
+      
+      if (!response.ok) {
+        throw new Error('Failed to generate similar domains')
+      }
+      
+      const data = await response.json()
+      const newDomainResults: DomainResultData[] = data.domains.map((domain: string) => ({
+        domain,
+        isAvailable: null,
+        isNewBatch: true,
+        isFromSaved: true
+      }))
+      
+      // Set expanded domains which will trigger a new search
+      setExpandedDomains(newDomainResults)
+      
+      // If no search term, create a synthetic one to display results
+      if (!searchTerm) {
+        setSearchTerm("similar domains")
+        setValidation({ isValid: true, error: null })
+      }
+    } catch (error) {
+      console.error('Error expanding saved domains:', error)
+    } finally {
+      setIsExpandingSaved(false)
+    }
+  }, [searchTerm])
 
   const examplePatterns = [
     { label: "{{cybersecurity startup terms}}.ai", value: "{{cybersecurity startup terms}}.ai" },
@@ -632,24 +725,53 @@ export default function DomainGenerator() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-4">
-      <div className="space-y-2">
-        <HighlightedInput
-          value={searchTerm}
-          onChange={validateAndSetSearchTerm}
-          placeholder="Enter domain pattern: example.com or {{get/use}}app.{{com/io}}"
-          error={!!validation.error}
+    <div className="relative">
+      <div className="max-w-2xl mx-auto space-y-4">
+        <div className="space-y-2">
+          <HighlightedInput
+            value={searchTerm}
+            onChange={validateAndSetSearchTerm}
+            placeholder="Enter domain pattern: example.com or {{get/use}}app.{{com/io}}"
+            error={!!validation.error}
+          />
+          {validation.error && <p className="text-sm text-red-500 font-light">{validation.error}</p>}
+        </div>
+
+        <ExamplePatterns 
+          patterns={examplePatterns}
+          onSelect={validateAndSetSearchTerm}
         />
-        {validation.error && <p className="text-sm text-red-500 font-light">{validation.error}</p>}
+
+        {/* Desktop: SavedDomains positioned next to results */}
+        <div className="hidden lg:block absolute left-[calc(100%+2rem)] top-0 w-80">
+          <SavedDomains 
+            savedDomains={savedDomains}
+            onRemove={removeSavedDomain}
+            onExpandMore={handleExpandSavedDomains}
+            isExpanding={isExpandingSaved}
+          />
+        </div>
+
+        {/* Mobile: SavedDomains in normal flow */}
+        <div className="block lg:hidden">
+          <SavedDomains 
+            savedDomains={savedDomains}
+            onRemove={removeSavedDomain}
+            onExpandMore={handleExpandSavedDomains}
+            isExpanding={isExpandingSaved}
+          />
+        </div>
+
+        <DomainList 
+          searchTerm={searchTerm} 
+          isValid={validation.isValid}
+          savedDomains={savedDomains}
+          onSaveDomain={addSavedDomain}
+          expandedDomains={expandedDomains}
+          onExpandedDomainsUsed={() => setExpandedDomains([])}
+        />
+        
       </div>
-
-      <ExamplePatterns 
-        patterns={examplePatterns}
-        onSelect={validateAndSetSearchTerm}
-      />
-
-      <DomainList searchTerm={searchTerm} isValid={validation.isValid} />
-      
     </div>
   )
 }
