@@ -37,7 +37,7 @@ Rules:
 - Otherwise return max 50 options
 - Unless constrained by pattern, return at least 5 options
 ${excludedOptions.length > 0 ? `- DO NOT generate these options that were already tried (use them for inspiration): ${excludedOptions.join(', ')}` : ''}`,
-      prompt: `Generate options for the following pattern: ${pattern}${excludedOptions.length > 0 ? `\n\nDO NOT generate these options (use them for inspiration): ${excludedOptions.join(', ')}` : ''}`,
+      prompt: `Generate options for the following pattern: ${pattern}${excludedOptions.length > 0 ? `\n\nDO NOT generate these options (use them for inspiration, and be creative to find other options): ${excludedOptions.join(', ')}` : ''}`,
       temperature: 0.9,
       seed: Math.round(Math.random()*100),
       maxTokens: 256,

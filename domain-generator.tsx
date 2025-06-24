@@ -9,7 +9,6 @@ import { ExamplePatterns } from "@/components/example-patterns"
 import { DomainResult } from "@/components/domain-result"
 import { useRateLimit } from "@/hooks/use-rate-limit"
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer"
-import { UnseenDomainsIndicator } from "@/components/unseen-domains-indicator"
 
 interface DomainResultData {
   domain: string
@@ -73,7 +72,6 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
   const [tryMoreRemaining, setTryMoreRemaining] = useState<number | null>(null)
   const [seenAvailableDomains, setSeenAvailableDomains] = useState<Set<string>>(new Set())
   const [fadingDomains, setFadingDomains] = useState<Set<string>>(new Set())
-  const [scrollTrigger, setScrollTrigger] = useState(0)
   const [patternResults, setPatternResults] = useState<any[]>([])
   const [allGeneratedDomains, setAllGeneratedDomains] = useState<Set<string>>(new Set())
   const checkingRef = useRef<Set<string>>(new Set())
@@ -164,54 +162,7 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
     }
   }, [])
 
-  // Add throttled scroll listener to update unseen domains position
-  useEffect(() => {
-    let scrollTimeout: NodeJS.Timeout
-    const handleScroll = () => {
-      clearTimeout(scrollTimeout)
-      scrollTimeout = setTimeout(() => {
-        setScrollTrigger(prev => prev + 1)
-      }, 100) // Throttle to every 100ms
-    }
 
-    window.addEventListener('scroll', handleScroll, { passive: true })
-    return () => {
-      clearTimeout(scrollTimeout)
-      window.removeEventListener('scroll', handleScroll)
-    }
-  }, [])
-
-  // Calculate unseen available domains
-  const unseenAvailableDomainsAbove = useMemo(() => {
-    const unseenAvailable: string[] = []
-    
-    for (const domain of domains) {
-      // Only count available domains that haven't been seen
-      if (domain.isAvailable === true && !seenAvailableDomains.has(domain.domain)) {
-        const element = domainRefs.current.get(domain.domain)
-        if (element) {
-          const rect = element.getBoundingClientRect()
-          // Only count if it's above the viewport
-          if (rect.bottom < 0) {
-            unseenAvailable.push(domain.domain)
-          }
-        }
-      }
-    }
-    
-    return unseenAvailable
-  }, [domains, seenAvailableDomains, scrollTrigger])
-
-  // Scroll to first unseen available domain
-  const scrollToFirstUnseen = () => {
-    if (unseenAvailableDomainsAbove.length > 0) {
-      const firstUnseenDomain = unseenAvailableDomainsAbove[0]
-      const element = domainRefs.current.get(firstUnseenDomain)
-      if (element) {
-        element.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      }
-    }
-  }
 
   // Check domain availability
   const checkDomain = useCallback(async (domain: string) => {
@@ -566,11 +517,6 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
 
   return (
     <div className="space-y-4">
-      <UnseenDomainsIndicator 
-        unseenAvailableCount={unseenAvailableDomainsAbove.length}
-        onClick={scrollToFirstUnseen}
-      />
-      
       <div className="space-y-1">
         {visibleDomains.map((item, index) => {
           const isFirstNewBatch = item.isNewBatch && 
