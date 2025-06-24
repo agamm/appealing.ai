@@ -31,14 +31,15 @@ export async function generateOptionsForPattern(pattern: string, excludedOptions
 - If asked to use prefixes, some common ones: get, try, use 
 - Keep words lowercase
 - When pattern asks for "X words" (e.g., "3 words", "10 words"), generate X individual single words, NOT multi-word phrases, and no spaces in between
-- Words/terms are usually not compound words, also they are not TLDs - unless specifically asked for
+- When pattern mentions "combinations" or "compound", generate both individual words AND compound words (e.g., for build/base/stack pattern, include: build, base, stack, buildbase, buildstack, basestack, stackbase, etc.)
+- Otherwise, words/terms are usually not compound words, also they are not TLDs - unless specifically asked for
 - If user asks for play on words, a play on words return a clever use of word meanings or sounds for humor or effect.
 - When pattern asks for "words similar to <word>" return words similar to <word> but also <word>.
 - When pattern asks for "words like <word>" don't return "<word>like" or "<word>dup"...
 - If pattern specifies a number (e.g., "10 words"), return exactly that many options
 - Otherwise return max 50 options
 - Unless constrained by pattern, return at least 5 options
-${excludedOptions.length > 0 ? `- DO NOT generate these options that were already tried: ${excludedOptions.join(', ')}` : ''}`,
+${excludedOptions.length > 0 ? `- DO NOT generate these options that were already tried (use them as inspiration): ${excludedOptions.join(', ')}` : ''}`,
       prompt: `Generate options for the following pattern: ${pattern}${requestedCount ? `\n\nIMPORTANT: You MUST generate EXACTLY ${requestedCount} options, no more, no less.` : ''}${excludedOptions.length > 0 ? `\n\nDO NOT generate these options: ${excludedOptions.join(', ')}` : ''}`,
       temperature: requestedCount ? 1.0 : 0.9,
       seed: Math.round(Math.random()*100),

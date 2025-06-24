@@ -18,13 +18,23 @@ export function DomainResult({
   isHighlighted = false,
   isFadingOut = false
 }: DomainResultProps) {
-  const handleClick = () => {
+  const handleClick = (e: React.MouseEvent) => {
     if (isAvailable === false) {
       // Open domain in new tab if taken
-      window.open(`https://${domain}`, '_blank')
+      if (e.button === 1 || e.button === 0) {
+        window.open(`https://${domain}`, '_blank')
+      }
     } else {
       // Copy to clipboard if available
       navigator.clipboard.writeText(domain)
+    }
+  }
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    // Handle middle click for unavailable domains
+    if (e.button === 1 && isAvailable === false) {
+      e.preventDefault()
+      window.open(`https://${domain}`, '_blank')
     }
   }
 
@@ -70,6 +80,7 @@ export function DomainResult({
           <span 
             className={`cursor-pointer ${isAvailable === false ? 'text-gray-400 underline' : 'text-gray-700'}`}
             onClick={handleClick}
+            onMouseDown={handleMouseDown}
             title={isAvailable === false ? "Click to visit" : "Click to copy"}
           >
             {domain}

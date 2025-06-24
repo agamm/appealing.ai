@@ -145,7 +145,6 @@ export async function isDomainAvailable(domain: string): Promise<boolean> {
     // 1. Check DNS first - fastest check
     const hasDns = await hasDnsRecords(cleanedDomain)
     if (hasDns) {
-      console.log(`${cleanedDomain}: has DNS records → taken`)
       return false
     }
     
@@ -155,12 +154,10 @@ export async function isDomainAvailable(domain: string): Promise<boolean> {
       try {
         const hasRdap = await hasRdapRecord(cleanedDomain, rdapUrl)
         if (hasRdap) {
-          console.log(`${cleanedDomain}: found in RDAP → taken`)
           return false
         }
       } catch {
         // RDAP check failed, continue to other methods
-        console.log(`${cleanedDomain}: RDAP check failed, continuing...`)
       }
     }
     
@@ -168,21 +165,17 @@ export async function isDomainAvailable(domain: string): Promise<boolean> {
     if (PORKBUN_ONLY_TLDS.has(tld)) {
       const hasPorkbun = await porkbunSemaphore.run(() => hasPorkbunRecord(cleanedDomain))
       if (hasPorkbun) {
-        console.log(`${cleanedDomain}: found in Porkbun → taken`)
         return false
       }
-      console.log(`${cleanedDomain}: available via Porkbun ✓`)
       return true
     }
     
     // 4. Check WHOIS (for WHOIS-only TLDs or as fallback)
     const hasWhois = await hasWhoisRecord(cleanedDomain)
     if (hasWhois) {
-      console.log(`${cleanedDomain}: found in WHOIS → taken`)
       return false
     }
     
-    console.log(`${cleanedDomain}: available ✓`)
     return true
     
   } catch (error) {
