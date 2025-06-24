@@ -18,6 +18,9 @@ export const metadata: Metadata = {
   icons: {
     icon: '/icon.svg',
   },
+  other: {
+    'impact-site-verification': '05f6d02d-e7bb-4753-856e-9138508d25f8',
+  },
 };
 
 export default function RootLayout({
