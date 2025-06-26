@@ -2,68 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import validator from 'validator'
 import { generatePermutations, extractPatterns } from '@/lib/patterns'
-import { generateObject } from 'ai'
-import { createOpenRouter } from '@openrouter/ai-sdk-provider'
-
-const openrouter = createOpenRouter({
-  apiKey: process.env.OPENROUTER_API_KEY,
-})
+import { generateOptionsForPatternWithExclusions } from '@/lib/generate-options'
 
 const requestSchema = z.object({
   query: z.string().min(1),
   generatedDomains: z.array(z.string()), // All previously generated domains to avoid duplicates
   options: z.record(z.array(z.string())) // Options by index: {"0": ["opt1", "opt2"], "1": ["opt3", "opt4"]}
 })
-
-export async function generateOptionsForPatternWithExclusions(pattern: string, excludedOptions: string[]): Promise<string[]> {
-  // Handle simple slash patterns first
-  if (pattern.includes("/") && /^[a-zA-Z0-9]+(?:\/[a-zA-Z0-9]+)+$/.test(pattern.trim())) {
-    return pattern
-      .split("/")
-      .map((opt) => opt.trim())
-      .filter((opt) => opt.length > 0)
-      .filter((opt) => !excludedOptions.includes(opt))
-  }
-
-  try {
-    const { object } = await generateObject({
-      model: openrouter("openai/gpt-4o-mini:floor"),
-      system: `Generate NEW options for domain patterns that are DIFFERENT from the excluded list.
-Rules:
-- CRITICAL: Generate ONLY new options that are NOT in the excluded list
-- Keep words lowercase
-- When pattern asks for "X words", generate X individual single words
-- No multi-word phrases or spaces
-- No TLDs (.com etc.)
-- Focus on generating fresh, creative alternatives
-- The excluded list contains options that have ALREADY been used - DO NOT repeat them`,
-      prompt: `Generate NEW options for pattern: ${pattern}
-
-EXCLUDED OPTIONS (DO NOT USE THESE):
-${excludedOptions.join(', ')}
-
-Generate ${Math.min(20, excludedOptions.length)} NEW options that are completely different from the excluded list above.`,
-      temperature: 0.95, // Higher temperature for more creativity
-      maxTokens: 256,
-      schema: z.object({
-        options: z.array(z.string()).min(1),
-      }),
-    })
-
-    // Double-check filtering to remove any duplicates
-    const lowerExcluded = new Set(excludedOptions.map(opt => opt.toLowerCase()))
-    
-    return object.options
-      .filter((option) => option.trim().length > 0)
-      .filter((option) => !option.includes('.'))
-      .filter((option) => !option.includes(' '))
-      .filter((option) => !lowerExcluded.has(option.toLowerCase()))
-      .slice(0, 20)
-  } catch (error) {
-    console.error('Failed to generate options for pattern:', pattern, error)
-    return []
-  }
-}
 
 export async function POST(request: NextRequest) {
   try {

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest'
-import { generateOptionsForPatternWithExclusions } from '@/app/api/domains/expand-more/route'
+import { generateOptionsForPatternWithExclusions } from '@/lib/generate-options'
 import { extractPatterns, generatePermutations } from '@/lib/patterns'
 import { config } from 'dotenv'
 import path from 'path'
