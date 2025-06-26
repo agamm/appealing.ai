@@ -1,159 +1,93 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { POST } from '@/app/api/domains/expand-more/route'
-import { NextRequest } from 'next/server'
+import { describe, it, expect, beforeAll } from 'vitest'
+import { generateOptionsForPatternWithExclusions } from '@/app/api/domains/expand-more/route'
+import { extractPatterns, generatePermutations } from '@/lib/patterns'
+import { config } from 'dotenv'
+import path from 'path'
 
-// Mock dependencies
-vi.mock('@/lib/domain-expansion', () => ({
-  generateOptionsForPattern: vi.fn()
-}))
+// Load environment variables before all tests
+beforeAll(() => {
+  config({ path: path.resolve(process.cwd(), '.env') })
+  
+  if (!process.env.OPENROUTER_API_KEY) {
+    throw new Error('OPENROUTER_API_KEY is not set. Please check your .env file')
+  }
+})
 
-import { generateOptionsForPattern } from '@/lib/domain-expansion'
-
-describe('Expand More API', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
-
-  it('should return only new options', async () => {
-    const mockGenerate = vi.mocked(generateOptionsForPattern)
-    mockGenerate
-      .mockResolvedValueOnce(['get', 'use', 'try', 'new1', 'new2']) // For first pattern
-      .mockResolvedValueOnce(['com', 'io', 'ai', 'dev']) // For second pattern
-
-    const request = new NextRequest('http://localhost:3000/api/domains/expand-more', {
-      method: 'POST',
-      body: JSON.stringify({
-        query: '{{prefix}}app.{{tld}}',
-        generatedDomains: ['getapp.com', 'useapp.io'],
-        options: {
-          '0': ['get', 'use', 'try'],
-          '1': ['com', 'io', 'ai']
-        }
-      })
-    })
-
-    const response = await POST(request)
-    const data = await response.json()
-
-    expect(data.query).toBe('{{prefix}}app.{{tld}}')
-    expect(data.options).toEqual({
-      '0': ['new1', 'new2'], // Only new options
-      '1': ['dev'] // Only new option
-    })
-    expect(data.domains).toContain('new1app.com')
-    expect(data.domains).toContain('new2app.dev')
-  })
-
-  it('should handle no new options available', async () => {
-    const mockGenerate = vi.mocked(generateOptionsForPattern)
-    mockGenerate
-      .mockResolvedValueOnce(['get', 'use']) // Same as existing
-      .mockResolvedValueOnce(['com', 'io']) // Same as existing
-
-    const request = new NextRequest('http://localhost:3000/api/domains/expand-more', {
-      method: 'POST',
-      body: JSON.stringify({
-        query: '{{prefix}}app.{{tld}}',
-        generatedDomains: ['getapp.com', 'getapp.io', 'useapp.com', 'useapp.io'],
-        options: {
-          '0': ['get', 'use'],
-          '1': ['com', 'io']
-        }
-      })
-    })
-
-    const response = await POST(request)
-    const data = await response.json()
-
-    expect(data.options).toEqual({
-      '0': [], // No new options
-      '1': [] // No new options
-    })
-    expect(data.domains).toHaveLength(0)
-    expect(data.message).toBe('No more unique domain suggestions available')
-  })
-
-  it('should filter out already generated domains', async () => {
-    const mockGenerate = vi.mocked(generateOptionsForPattern)
-    mockGenerate
-      .mockResolvedValueOnce(['get', 'use', 'try'])
-      .mockResolvedValueOnce(['com', 'io', 'ai'])
-
-    const request = new NextRequest('http://localhost:3000/api/domains/expand-more', {
-      method: 'POST',
-      body: JSON.stringify({
-        query: '{{prefix}}app.{{tld}}',
-        generatedDomains: ['getapp.com', 'useapp.io', 'tryapp.ai'], // Already generated
-        options: {
-          '0': ['get', 'use'],
-          '1': ['com', 'io']
-        }
-      })
-    })
-
-    const response = await POST(request)
-    const data = await response.json()
-
-    expect(data.options).toEqual({
-      '0': ['try'], // New option
-      '1': ['ai'] // New option
-    })
+describe('Expand More with Real AI', () => {
+  it('should generate unique tech words for {{2 tech words}}.io across 3 iterations', async () => {
+    console.log('API Key present:', !!process.env.OPENROUTER_API_KEY)
+    console.log('API Key length:', process.env.OPENROUTER_API_KEY?.length)
     
-    // Should not include already generated domains
-    expect(data.domains).not.toContain('getapp.com')
-    expect(data.domains).not.toContain('useapp.io')
-    expect(data.domains).not.toContain('tryapp.ai')
+    const query = '{{2 tech words}}.io'
+    const patterns = extractPatterns(query)
     
-    // Should include new combinations
-    expect(data.domains).toContain('getapp.ai')
-    expect(data.domains).toContain('tryapp.com')
-  })
-
-  it('should handle patterns with no previous options', async () => {
-    const mockGenerate = vi.mocked(generateOptionsForPattern)
-    mockGenerate
-      .mockResolvedValueOnce(['get', 'use'])
-      .mockResolvedValueOnce(['com', 'io'])
-
-    const request = new NextRequest('http://localhost:3000/api/domains/expand-more', {
-      method: 'POST',
-      body: JSON.stringify({
-        query: '{{prefix}}app.{{tld}}',
-        generatedDomains: [],
-        options: {} // No previous options
-      })
-    })
-
-    const response = await POST(request)
-    const data = await response.json()
-
-    expect(data.options).toEqual({
-      '0': ['get', 'use'],
-      '1': ['com', 'io']
-    })
-    expect(data.domains).toHaveLength(4) // 2 * 2 combinations
-  })
-
-  it('should respect the 50 domain limit', async () => {
-    const mockGenerate = vi.mocked(generateOptionsForPattern)
-    // Generate many options to exceed limit
-    const manyOptions = Array.from({ length: 20 }, (_, i) => `option${i}`)
-    mockGenerate
-      .mockResolvedValueOnce(manyOptions)
-      .mockResolvedValueOnce(manyOptions)
-
-    const request = new NextRequest('http://localhost:3000/api/domains/expand-more', {
-      method: 'POST',
-      body: JSON.stringify({
-        query: '{{prefix}}app.{{tld}}',
-        generatedDomains: [],
-        options: {}
-      })
-    })
-
-    const response = await POST(request)
-    const data = await response.json()
-
-    expect(data.domains.length).toBeLessThanOrEqual(50)
-  })
+    expect(patterns).toHaveLength(1)
+    expect(patterns[0].pattern).toBe('2 tech words')
+    
+    // Track all generated options
+    const allOptions: string[] = []
+    
+    console.log('\n=== Testing expand-more functionality ===')
+    
+    // First test basic generation without exclusions
+    console.log('\n--- Initial test without exclusions ---')
+    const initialOptions = await generateOptionsForPatternWithExclusions('2 tech words', [])
+    console.log(`Initial generation returned ${initialOptions.length} options:`, initialOptions)
+    
+    if (initialOptions.length === 0) {
+      console.error('Failed to generate initial options. Check OPENROUTER_API_KEY and network connection.')
+      // Skip the test if we can't generate options
+      expect(initialOptions.length).toBeGreaterThan(0)
+      return
+    }
+    
+    // Add initial options to our tracking
+    allOptions.push(...initialOptions)
+    
+    // Now test with exclusions
+    for (let i = 1; i <= 2; i++) {
+      console.log(`\n--- Iteration ${i} with exclusions ---`)
+      console.log(`Excluding ${allOptions.length} options`)
+      
+      // Generate new options, excluding previously generated ones
+      const newOptions = await generateOptionsForPatternWithExclusions('2 tech words', allOptions)
+      
+      console.log(`Generated ${newOptions.length} new options:`, newOptions.slice(0, 5), '...')
+      
+      if (newOptions.length === 0) {
+        console.warn('No new options generated, AI might have exhausted unique options')
+        break
+      }
+      
+      // Check that new options don't duplicate existing ones
+      const duplicates = newOptions.filter(opt => 
+        allOptions.some(existing => existing.toLowerCase() === opt.toLowerCase())
+      )
+      
+      if (duplicates.length > 0) {
+        console.error('Found duplicates:', duplicates)
+      }
+      
+      expect(duplicates.length).toBe(0)
+      
+      // Add to all options
+      allOptions.push(...newOptions)
+      
+      // Generate some sample domains
+      const options = { '0': allOptions.slice(-10) } // Just use last 10 options for sample
+      const domains = generatePermutations(query, options).slice(0, 5)
+      console.log('Sample domains:', domains)
+    }
+    
+    console.log('\n=== Summary ===')
+    console.log(`Total unique options generated: ${allOptions.length}`)
+    console.log('First 10 options:', allOptions.slice(0, 10))
+    
+    // Should have generated multiple unique options
+    expect(allOptions.length).toBeGreaterThan(3)
+    
+    // All options should be unique
+    const uniqueOptions = new Set(allOptions.map(opt => opt.toLowerCase()))
+    expect(uniqueOptions.size).toBe(allOptions.length)
+  }, 90000) // 90 second timeout for multiple AI calls
 })

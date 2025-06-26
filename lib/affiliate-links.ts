@@ -1,4 +1,5 @@
 export function generateNamecheapAffiliateLink(domain: string): string {
-  const baseUrl = "https://www.qksrv.net/links/101473094/type/am/sid/4055157/https://www.namecheap.com/domains/registration/results/?domain=";
-  return baseUrl + encodeURIComponent(domain);
+  const affiliateId = "101473094"; // Replace with your Commission Junction affiliate ID
+  const baseUrl = `http://www.anrdoezrs.net/links/${affiliateId}/type/dlg/https://www.namecheap.com/domains/registration/results.aspx?domain=`;
+  return baseUrl + domain;
 }

@@ -12,6 +12,7 @@ import { useIntersectionObserver } from "@/hooks/use-intersection-observer"
 import { useExpandDomains } from "@/hooks/use-expand-domains"
 import { useExpandMoreDomains } from "@/hooks/use-expand-more-domains"
 import { useCheckDomain } from "@/hooks/use-check-domain"
+import { useDebounce } from "@/hooks/use-debounce"
 
 interface DomainResultData {
   domain: string
@@ -86,6 +87,7 @@ function DomainChecker({ domain, onResult }: { domain: string; onResult: (domain
 }
 
 function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: boolean }) {
+  const debouncedSearchTerm = useDebounce(searchTerm, 500)
   const [domains, setDomains] = useState<DomainResultData[]>([])
   const [visibleCount, setVisibleCount] = useState(100)
   const [currentSearchId, setCurrentSearchId] = useState<string | null>(null)
@@ -107,13 +109,13 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
     incrementTryMore
   } = useRateLimit()
   
-  // Use domain expansion hooks
+  // Use domain expansion hooks with debounced search term
   const { 
     domains: expandedDomains, 
     options: expandedOptions, 
     isLoading: isExpanding, 
     error: expandError 
-  } = useExpandDomains(searchTerm, isValid)
+  } = useExpandDomains(debouncedSearchTerm, isValid)
   
   const { 
     expandMore, 
