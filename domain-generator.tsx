@@ -13,6 +13,7 @@ import { useExpandDomains } from "@/hooks/use-expand-domains"
 import { useExpandMoreDomains } from "@/hooks/use-expand-more-domains"
 import { useCheckDomain } from "@/hooks/use-check-domain"
 import { useDebounce } from "@/hooks/use-debounce"
+import { useQueryState } from "nuqs"
 
 interface DomainResultData {
   domain: string
@@ -445,7 +446,10 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
 }
 
 export default function DomainGenerator() {
-  const [searchTerm, setSearchTerm] = useState("")
+  const [searchTerm, setSearchTerm] = useQueryState('q', {
+    defaultValue: '',
+    shallow: false,
+  })
   const [validation, setValidation] = useState<{ isValid: boolean; error: string | null }>({
     isValid: true,
     error: null,

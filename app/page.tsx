@@ -1,5 +1,6 @@
 import DomainGenerator from "../domain-generator"
 import Link from "next/link"
+import { Suspense } from "react"
 
 export default function Page() {
   return (
@@ -10,7 +11,9 @@ export default function Page() {
           <p className="text-gray-500 text-center max-w-md font-light text-lg">
             Ready to find a really good domain name?
           </p>
-          <DomainGenerator />
+          <Suspense fallback={<div className="animate-pulse h-12 w-96 bg-gray-100 rounded-md"></div>}>
+            <DomainGenerator />
+          </Suspense>
         </div>
       </main>
       
