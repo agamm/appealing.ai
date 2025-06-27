@@ -28,15 +28,15 @@ export function HighlightedInput({
     }
   }
 
-  // Split text by {{ }} patterns using regex
+  // Split text by ( ) patterns using regex
   const renderHighlightedText = () => {
     if (!value) return null
 
-    // Split by {{...}} pattern while keeping the delimiters
-    const parts = value.split(/({{.*?}})/g)
+    // Split by (...) pattern while keeping the delimiters
+    const parts = value.split(/(\(.*?\))/g)
     
     return parts.map((part, index) => {
-      const isPattern = part.startsWith('{{') && part.endsWith('}}')
+      const isPattern = part.startsWith('(') && part.endsWith(')')
       
       if (isPattern) {
         return (

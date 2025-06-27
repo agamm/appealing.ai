@@ -4,28 +4,28 @@ import { extractPatterns, cartesianProduct, generatePermutations } from "../lib/
 describe("Utility Functions", () => {
   describe("extractPatterns", () => {
     it("should extract single pattern", () => {
-      const result = extractPatterns("{{get/use}}app.com")
+      const result = extractPatterns("(get/use)app.com")
       expect(result).toEqual([
         {
           pattern: "get/use",
           startIndex: 0,
-          endIndex: 11,
+          endIndex: 9,
         },
       ])
     })
 
     it("should extract multiple patterns", () => {
-      const result = extractPatterns("{{get/use}}thing.{{com/io}}")
+      const result = extractPatterns("(get/use)thing.(com/io)")
       expect(result).toEqual([
         {
           pattern: "get/use",
           startIndex: 0,
-          endIndex: 11,
+          endIndex: 9,
         },
         {
           pattern: "com/io",
-          startIndex: 17,
-          endIndex: 27,
+          startIndex: 15,
+          endIndex: 23,
         },
       ])
     })
@@ -36,38 +36,38 @@ describe("Utility Functions", () => {
     })
 
     it("should handle empty patterns", () => {
-      const result = extractPatterns("{{}}app.com")
+      const result = extractPatterns("()app.com")
       expect(result).toEqual([])  // Empty patterns are now filtered out
     })
 
     it("should handle patterns with spaces", () => {
-      const result = extractPatterns("{{ get / use }}app.com")
+      const result = extractPatterns("( get / use )app.com")
       expect(result).toEqual([
         {
           pattern: " get / use ",
           startIndex: 0,
-          endIndex: 15,
+          endIndex: 13,
         },
       ])
     })
 
     it("should handle complex patterns", () => {
-      const result = extractPatterns("{{prefix/}}{{word}}{{.com/.io}}")
+      const result = extractPatterns("(prefix/)(word)(.com/.io)")
       expect(result).toEqual([
         {
           pattern: "prefix/",
           startIndex: 0,
-          endIndex: 11,
+          endIndex: 9,
         },
         {
           pattern: "word",
-          startIndex: 11,
-          endIndex: 19,
+          startIndex: 9,
+          endIndex: 15,
         },
         {
           pattern: ".com/.io",
-          startIndex: 19,
-          endIndex: 31,
+          startIndex: 15,
+          endIndex: 25,
         },
       ])
     })
@@ -125,7 +125,7 @@ describe("Utility Functions", () => {
 
   describe("generatePermutations", () => {
     it("should generate permutations with single pattern", () => {
-      const query = "{{pattern}}app.com"
+      const query = "(pattern)app.com"
       const options = {
         "0": ["get", "use"]
       }
@@ -134,7 +134,7 @@ describe("Utility Functions", () => {
     })
 
     it("should generate permutations with multiple patterns", () => {
-      const query = "{{prefix}}thing.{{tld}}"
+      const query = "(prefix)thing.(tld)"
       const options = {
         "0": ["get", "use"],
         "1": ["com", "io"]
@@ -151,7 +151,7 @@ describe("Utility Functions", () => {
     })
 
     it("should handle patterns with different option counts", () => {
-      const query = "{{a}}{{b}}.com"
+      const query = "(a)(b).com"
       const options = {
         "0": ["x", "y", "z"],
         "1": ["1", "2"]
@@ -161,7 +161,7 @@ describe("Utility Functions", () => {
     })
 
     it("should handle patterns with single options", () => {
-      const query = "{{single}}app.com"
+      const query = "(single)app.com"
       const options = {
         "0": ["only"]
       }
@@ -170,7 +170,7 @@ describe("Utility Functions", () => {
     })
 
     it("should handle complex template with multiple patterns", () => {
-      const query = "{{pre}}{{mid}}{{post}}.{{ext}}"
+      const query = "(pre)(mid)(post).(ext)"
       const options = {
         "0": ["a", "b"],
         "1": ["x"],

@@ -28,17 +28,17 @@ const faqItems: FAQItem[] = [
         
         <div className="space-y-3">
           <div className="bg-gray-50 p-3 rounded">
-            <code className="text-sm font-mono">{"{{get/set}}something.com"}</code>
+            <code className="text-sm font-mono">{"(get/set)something.com"}</code>
             <p className="text-sm text-gray-600 mt-1">Generates: getsomething.com, setsomething.com</p>
           </div>
           
           <div className="bg-gray-50 p-3 rounded">
-            <code className="text-sm font-mono">{"{{one dictionary word}}.io"}</code>
+            <code className="text-sm font-mono">{"(one dictionary word).io"}</code>
             <p className="text-sm text-gray-600 mt-1">Generates domains with common dictionary words like: bridge.io, nature.io, ocean.io</p>
           </div>
           
           <div className="bg-gray-50 p-3 rounded">
-            <code className="text-sm font-mono">{"{{words similar to spark}}.com"}</code>
+            <code className="text-sm font-mono">{"(words similar to spark).com"}</code>
             <p className="text-sm text-gray-600 mt-1">Generates domains with related words like: flame.com, ignite.com, flash.com</p>
           </div>
         </div>

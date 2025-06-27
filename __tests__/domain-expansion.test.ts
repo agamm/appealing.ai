@@ -84,8 +84,8 @@ describe('Domain Expansion with Real AI', () => {
     }, 30000)
   })
 
-  describe('Domain patterns without {{}} patterns', () => {
-    it('should not make LLM call when pattern has no {{}} placeholders', async () => {
+  describe('Domain patterns without () patterns', () => {
+    it('should not make LLM call when pattern has no () placeholders', async () => {
       const pattern = 'example.com'
       const patterns = extractPatterns(pattern)
       
@@ -186,8 +186,8 @@ describe('Domain Expansion with Real AI', () => {
   })
 
   describe('Full domain generation flow with real AI', () => {
-    it('should generate 110 domains for {{10 words}}{{11 words}}.com', async () => {
-      const pattern = '{{10 words}}{{11 words}}.com'
+    it('should generate 110 domains for (10 words)(11 words).com', async () => {
+      const pattern = '(10 words)(11 words).com'
       const patterns = extractPatterns(pattern)
       
       expect(patterns).toHaveLength(2)
@@ -239,8 +239,8 @@ describe('Domain Expansion with Real AI', () => {
       })
     }, 60000) // 60 second timeout for multiple LLM calls
 
-    it('should generate single words for {{3 words}}{{3 words}}.com', async () => {
-      const pattern = '{{3 words}}{{3 words}}.com'
+    it('should generate single words for (3 words)(3 words).com', async () => {
+      const pattern = '(3 words)(3 words).com'
       const patterns = extractPatterns(pattern)
       
       // Generate options for each pattern

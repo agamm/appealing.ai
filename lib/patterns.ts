@@ -1,6 +1,6 @@
 export function extractPatterns(input: string): { pattern: string; startIndex: number; endIndex: number }[] {
   const patterns: { pattern: string; startIndex: number; endIndex: number }[] = []
-  const regex = /\{\{([^{}]*)\}\}/g
+  const regex = /\(([^()]*)\)/g
   let match
 
   while ((match = regex.exec(input)) !== null) {

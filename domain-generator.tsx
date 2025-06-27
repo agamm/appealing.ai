@@ -27,43 +27,43 @@ function validateDomainQuery(query: string): { isValid: boolean; error: string |
     return { isValid: true, error: null }
   }
 
-  const bracePattern = /\{\{|\}\}/g
+  const bracePattern = /\(|\)/g
   const matches = query.match(bracePattern) || []
 
   let openCount = 0
   for (const match of matches) {
-    if (match === "{{") {
+    if (match === "(") {
       openCount++
-    } else if (match === "}}") {
+    } else if (match === ")") {
       openCount--
       if (openCount < 0) {
-        return { isValid: false, error: "Closing }} without opening {{" }
+        return { isValid: false, error: "Closing ) without opening (" }
       }
     }
   }
 
   if (openCount !== 0) {
-    return { isValid: false, error: "Unmatched {{ }} braces" }
+    return { isValid: false, error: "Unmatched ( ) braces" }
   }
 
-  const emptyPatternMatch = query.match(/\{\{\s*\}\}/)
+  const emptyPatternMatch = query.match(/\(\s*\)/)
   if (emptyPatternMatch) {
-    return { isValid: false, error: "Empty pattern {{}} is not allowed" }
+    return { isValid: false, error: "Empty pattern () is not allowed" }
   }
 
-  const outsidePattern = query.replace(/\{\{[^}]*\}\}/g, "PLACEHOLDER")
+  const outsidePattern = query.replace(/\([^)]*\)/g, "PLACEHOLDER")
   const invalidChars = outsidePattern.match(/[^a-zA-Z0-9.\-PLACEHOLDER]/g)
 
   if (invalidChars) {
     const firstInvalidChar = invalidChars[0]
     return {
       isValid: false,
-      error: `Invalid character '${firstInvalidChar}' outside {{ }}. Only letters, numbers, dots, and dashes allowed.`,
+      error: `Invalid character '${firstInvalidChar}' outside ( ). Only letters, numbers, dots, and dashes allowed.`,
     }
   }
 
   // Check pattern count limit
-  const patternMatches = query.match(/\{\{[^}]*\}\}/g) || []
+  const patternMatches = query.match(/\([^)]*\)/g) || []
   if (patternMatches.length > 4) {
     return {
       isValid: false,
@@ -456,9 +456,9 @@ export default function DomainGenerator() {
   })
 
   const examplePatterns = [
-    { label: "{{cybersecurity startup terms}}.ai", value: "{{cybersecurity startup terms}}.ai" },
-    { label: "{{use/try}}myapp.{{com/io}}", value: "{{use/try}}myapp.{{com/io}}" },
-    { label: "{{one dictionary word}}.io", value: "{{one dictionary word}}.io" },
+    { label: "(cybersecurity startup terms).ai", value: "(cybersecurity startup terms).ai" },
+    { label: "(use/try)myapp.(com/io)", value: "(use/try)myapp.(com/io)" },
+    { label: "(one dictionary word).io", value: "(one dictionary word).io" },
   ]
 
   const validateAndSetSearchTerm = (query: string) => {
@@ -473,7 +473,7 @@ export default function DomainGenerator() {
         <HighlightedInput
           value={searchTerm}
           onChange={validateAndSetSearchTerm}
-          placeholder="Enter domain query: example.com or {{get/use}}app.{{com/io}}"
+          placeholder="Enter domain query: example.com or (get/use)app.(com/io)"
           error={!!validation.error}
         />
         {validation.error && <p className="text-sm text-red-500 font-light">{validation.error}</p>}

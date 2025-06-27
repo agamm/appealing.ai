@@ -14,11 +14,11 @@ beforeAll(() => {
 })
 
 describe('Expand More with Real AI', () => {
-  it('should generate unique tech words for {{2 tech words}}.io across 3 iterations', async () => {
+  it('should generate unique tech words for (2 tech words).io across 3 iterations', async () => {
     console.log('API Key present:', !!process.env.OPENROUTER_API_KEY)
     console.log('API Key length:', process.env.OPENROUTER_API_KEY?.length)
     
-    const query = '{{2 tech words}}.io'
+    const query = '(2 tech words).io'
     const patterns = extractPatterns(query)
     
     expect(patterns).toHaveLength(1)
