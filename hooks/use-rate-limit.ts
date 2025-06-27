@@ -77,10 +77,11 @@ export function useRateLimit() {
   }, [data])
 
   const checkDailySearchLimit = useCallback((): { allowed: boolean; remaining: number } => {
-    const allowed = data.dailySearches < RATE_LIMITS.DAILY_SEARCHES
-    const remaining = Math.max(0, RATE_LIMITS.DAILY_SEARCHES - data.dailySearches)
+    const currentData = loadRateLimitData()
+    const allowed = currentData.dailySearches < RATE_LIMITS.DAILY_SEARCHES
+    const remaining = Math.max(0, RATE_LIMITS.DAILY_SEARCHES - currentData.dailySearches)
     return { allowed, remaining }
-  }, [data.dailySearches])
+  }, [])
 
   const incrementDailySearches = useCallback(() => {
     setData(prev => ({
@@ -90,11 +91,12 @@ export function useRateLimit() {
   }, [])
 
   const checkTryMoreLimit = useCallback((searchId: string): { allowed: boolean; remaining: number } => {
-    const tryMoreCount = data.searchLimits[searchId] || 0
+    const currentData = loadRateLimitData()
+    const tryMoreCount = currentData.searchLimits[searchId] || 0
     const allowed = tryMoreCount < RATE_LIMITS.TRY_MORE_PER_SEARCH
     const remaining = Math.max(0, RATE_LIMITS.TRY_MORE_PER_SEARCH - tryMoreCount)
     return { allowed, remaining }
-  }, [data.searchLimits])
+  }, [])
 
   const incrementTryMore = useCallback((searchId: string) => {
     setData(prev => ({
