@@ -37,18 +37,18 @@ function validateDomainQuery(query: string): { isValid: boolean; error: string |
     } else if (match === ")") {
       openCount--
       if (openCount < 0) {
-        return { isValid: false, error: "Closing ) without opening (" }
+        return { isValid: false, error: "Found closing ) without opening ( - did you forget to add an opening parenthesis?" }
       }
     }
   }
 
   if (openCount !== 0) {
-    return { isValid: false, error: "Unmatched ( ) braces" }
+    return { isValid: false, error: "Unmatched parentheses - make sure each ( has a closing )" }
   }
 
   const emptyPatternMatch = query.match(/\(\s*\)/)
   if (emptyPatternMatch) {
-    return { isValid: false, error: "Empty pattern () is not allowed" }
+    return { isValid: false, error: "Empty pattern () is not allowed - try to write something inside the parentheses. " }
   }
 
   const outsidePattern = query.replace(/\([^)]*\)/g, "PLACEHOLDER")
@@ -58,7 +58,7 @@ function validateDomainQuery(query: string): { isValid: boolean; error: string |
     const firstInvalidChar = invalidChars[0]
     return {
       isValid: false,
-      error: `Invalid character '${firstInvalidChar}' outside ( ). Only letters, numbers, dots, and dashes allowed.`,
+      error: `Invalid character '${firstInvalidChar}' outside parentheses. ${firstInvalidChar === '/' ? 'Did you mean to put it inside parentheses like (option1/option2)?' : 'Only letters, numbers, dots, and dashes allowed outside ( ).'}`,
     }
   }
 
@@ -353,7 +353,20 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
   }
 
   if (domains.length === 0) {
-    return <div className="text-center text-gray-400 text-sm py-4 font-light">No domains generated. Try a different pattern.</div>
+    return (
+      <div className="text-center text-gray-500 text-sm py-8 font-light space-y-3">
+        <div>No domains generated. Try a different pattern.</div>
+        <div className="max-w-md mx-auto space-y-2">
+          <p className="text-xs text-gray-400">How it works:</p>
+          <p className="text-xs text-gray-400">Use parentheses to tell AI what variations you want. The AI will suggest creative options for each ( ) and combine them with your domain structure.</p>
+          <div className="text-xs text-gray-400 bg-gray-50 p-3 rounded-md font-mono space-y-1">
+            <div>(action verbs)app.(com/io)</div>
+            <div className="text-gray-300">↓ AI creates permutations ↓</div>
+            <div className="text-gray-600">getapp.com, useapp.com, tryapp.io, findapp.io...</div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (

@@ -16,7 +16,7 @@ function renderLabelWithParentheses(label: string) {
     // Check if this part is within parentheses
     if (part.startsWith('(') && part.endsWith(')')) {
       return (
-        <span key={index} className="text-purple-500 group-hover:text-purple-700 bg-purple-50 group-hover:bg-purple-100 px-1.5 py-0.5 rounded-md text-[10px] mx-0.5 underline underline-offset-2 decoration-from-font decoration-thin transition-colors" style={{ textDecorationThickness: '0.5px' }}>
+        <span key={index} className="text-purple-500 group-hover:text-purple-700 bg-purple-50 group-hover:bg-purple-100 px-1.5 py-0.5 rounded-md text-[12px] mx-0.5 underline underline-offset-2 decoration-from-font decoration-thin transition-colors" style={{ textDecorationThickness: '0.5px' }}>
           {part}
         </span>
       );
