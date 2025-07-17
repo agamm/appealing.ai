@@ -456,7 +456,7 @@ export default function DomainGenerator() {
   })
 
   const examplePatterns = [
-    { label: "(cybersecurity startup terms).ai", value: "(cybersecurity startup terms).ai" },
+    { label: "(two cybersecurity startup terms).ai", value: "(two cybersecurity startup terms).ai" },
     { label: "(use/try)myapp.(com/io)", value: "(use/try)myapp.(com/io)" },
     { label: "(one dictionary word).io", value: "(one dictionary word).io" },
   ]

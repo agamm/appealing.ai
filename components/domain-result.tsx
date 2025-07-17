@@ -53,13 +53,6 @@ export function DomainResult({
       url: generateNamecheapAffiliateLink(domain),
       width: 80,
       height: 16
-    },
-    {
-      name: 'GoDaddy',
-      logo: '/godaddy-logo.svg',
-      url: `https://www.godaddy.com/domainsearch/find?domainToCheck=${domain}`,
-      width: 70,
-      height: 16
     }
   ]
 

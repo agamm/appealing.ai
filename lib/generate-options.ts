@@ -17,16 +17,16 @@ export async function generateOptionsForPattern(pattern: string): Promise<string
 
   try {
     const { object } = await generateObject({
-      model: openrouter("openai/gpt-4o-mini:floor"),
+      model: openrouter("openai/gpt-4.1-mini:floor"),
       system: `Generate options for domain patterns. 
 Rules:
 - If pattern contains "/" return those exact options
 - For "dictionary word" return common English words suitable for domains
 - For "with/without -" include both versions
 - Keep words lowercase
-- When pattern asks for "X words" (e.g., "3 words", "10 words"), generate exactly X individual single words
+- When pattern asks for "X words/terms" (e.g., "3 words", "10 words"), generate exactly X individual single words X>1 compound them together
 - When pattern mentions "combinations" or "compound", generate both individual words AND compound words
-- Otherwise, words/terms are usually not compound words, also they are not TLDs (.com etc.)
+- Otherwise, words/terms are usually not compound words, also they are not TLDs (.com etc.) UNLESS the pattern specifically asks for TLDs or domain extensions
 - If user asks for play on words, return clever use of word meanings or sounds
 - When pattern asks for "words similar to <word>" return words similar to <word> but also include <word>
 - If pattern specifies a number (e.g., "10 words"), return exactly that many options
@@ -42,7 +42,6 @@ Rules:
 
     return object.options
       .filter((option) => option.trim().length > 0)
-      .filter((option) => !option.includes('.'))
       .filter((option) => !option.includes(' '))
       .slice(0, 50)
   } catch (error) {
@@ -63,7 +62,7 @@ export async function generateOptionsForPatternWithExclusions(pattern: string, e
 
   try {
     const { object } = await generateObject({
-      model: openrouter("openai/gpt-4o-mini:floor"),
+      model: openrouter("openai/gpt-4.1-mini:floor"),
       system: `Generate NEW options for domain patterns that are DIFFERENT from the excluded list.
 Rules:
 - CRITICAL: Generate ONLY new options that are NOT in the excluded list
@@ -91,7 +90,6 @@ Generate ${Math.min(20, excludedOptions.length)} NEW options that are completely
     
     return object.options
       .filter((option) => option.trim().length > 0)
-      .filter((option) => !option.includes('.'))
       .filter((option) => !option.includes(' '))
       .filter((option) => !lowerExcluded.has(option.toLowerCase()))
       .slice(0, 20)
