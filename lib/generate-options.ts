@@ -27,6 +27,7 @@ Rules:
 - When pattern asks for "X words/terms" (e.g., "3 words", "10 words"), generate exactly X individual single words X>1 compound them together
 - When pattern mentions "combinations" or "compound", generate both individual words AND compound words
 - Otherwise, words/terms are usually not compound words, also they are not TLDs (.com etc.) UNLESS the pattern specifically asks for TLDs or domain extensions
+- When generating TLDs or domain extensions, return them WITHOUT the leading dot (e.g., "com", "org", "io", not ".com", ".org", ".io")
 - If user asks for play on words, return clever use of word meanings or sounds
 - When pattern asks for "words similar to <word>" return words similar to <word> but also include <word>
 - If pattern specifies a number (e.g., "10 words"), return exactly that many options
@@ -69,7 +70,7 @@ Rules:
 - Keep words lowercase
 - When pattern asks for "X words", generate X individual single words
 - No multi-word phrases or spaces
-- No TLDs (.com etc.)
+- When generating TLDs or domain extensions, return them WITHOUT the leading dot (e.g., "com", "org", not ".com", ".org")
 - Focus on generating fresh, creative alternatives
 - The excluded list contains options that have ALREADY been used - DO NOT repeat them`,
       prompt: `Generate NEW options for pattern: ${pattern}
