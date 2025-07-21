@@ -462,6 +462,7 @@ export default function DomainGenerator() {
   const [searchTerm, setSearchTerm] = useQueryState('q', {
     defaultValue: '',
     shallow: false,
+    throttleMs: 500, // Match the debounce delay for domain expansion
   })
   const [validation, setValidation] = useState<{ isValid: boolean; error: string | null }>({
     isValid: true,
