@@ -227,7 +227,7 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
   
   // Clear state when search term changes
   useEffect(() => {
-    if (!searchTerm.trim()) {
+    if (!searchTerm.trim() || extractPatterns(searchTerm).length === 0) {
       setDomains([])
       setAllGeneratedDomains(new Set())
       setFadingDomains(new Set())
@@ -354,15 +354,22 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
 
   if (domains.length === 0) {
     return (
-      <div className="text-center text-gray-500 text-sm py-8 font-light space-y-3">
-        <div>No domains generated. Try a different pattern.</div>
-        <div className="max-w-md mx-auto space-y-2">
-          <p className="text-xs text-gray-400">How it works:</p>
-          <p className="text-xs text-gray-400">Use parentheses to tell AI what variations you want. The AI will suggest creative options for each ( ) and combine them with your domain structure.</p>
-          <div className="text-xs text-gray-400 bg-gray-50 p-3 rounded-md font-mono space-y-1">
-            <div>(action verbs)app.(com/io)</div>
-            <div className="text-gray-300">↓ AI creates permutations ↓</div>
-            <div className="text-gray-600">getapp.com, useapp.com, tryapp.io, findapp.io...</div>
+      <div className="text-center text-gray-500 text-sm py-6 font-light space-y-3">
+        <div>Anything in <span className="text-purple-600 font-semibold">( )</span> is sent to AI to generate words:</div>
+        <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+          <div className="text-xs font-mono">
+            <div className="flex items-center justify-center gap-1 text-gray-600">
+              <span>fire</span>
+              <span className="text-purple-600 font-semibold">(animals)</span>
+              <span>.com</span>
+            </div>
+          </div>
+          <div className="text-gray-400 text-xs animate-pulse">↓</div>
+          <div className="text-xs font-mono space-y-1 text-gray-700">
+            <div>firelion.com</div>
+            <div>firetiger.com</div>
+            <div>firewolf.com</div>
+            <div className="text-gray-400">...</div>
           </div>
         </div>
       </div>
@@ -471,7 +478,7 @@ export default function DomainGenerator() {
 
   const examplePatterns = [
     { label: "(two cybersecurity startup terms).ai", value: "(two cybersecurity startup terms).ai" },
-    { label: "(use/try)myapp.(com/io)", value: "(use/try)myapp.(com/io)" },
+    { label: "(action words)myapp.(com/io)", value: "(action words)myapp.(com/io)" },
     { label: "(one dictionary word).io", value: "(one dictionary word).io" },
   ]
 
