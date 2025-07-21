@@ -20,15 +20,16 @@ export async function checkDns(domain: string): Promise<boolean> {
     
     // No A records found, domain might be available
     return true
-  } catch (error: any) {
+  } catch (error) {
     // DNS resolution failed
-    if (error.code === 'ENOTFOUND' || error.code === 'ENODATA') {
+    const nodeError = error as NodeJS.ErrnoException
+    if (nodeError.code === 'ENOTFOUND' || nodeError.code === 'ENODATA') {
       // Domain doesn't exist in DNS, likely available
       return true
     }
     
     // For other errors (network issues, etc.), we can't determine availability
     // Return null to indicate we should try other methods
-    throw new Error(`DNS check failed: ${error.message}`)
+    throw new Error(`DNS check failed: ${nodeError.message || 'Unknown error'}`)
   }
 }
