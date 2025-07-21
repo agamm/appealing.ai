@@ -4,6 +4,7 @@ import axios from 'axios'
 import { lookup as whoisLookup } from 'whois'
 import { promisify } from 'util'
 import { Semaphore } from './semaphore'
+import { checkDns } from './dns-check'
 
 // Configuration
 const TLDS_PATH = join(process.cwd(), 'lib', 'tlds.json')
@@ -42,6 +43,29 @@ function getRdapUrl(tld: string): string | null {
 function isAvailableWhoisResponse(response: string): boolean {
   const lowerResponse = response.toLowerCase()
   
+  // Check if this looks like a domain registration record first
+  const registrationIndicators = [
+    'domain name:',
+    'registrar:',
+    'creation date:',
+    'created:',
+    'registry domain id:',
+    'registrant',
+    'name server',
+    'expiry date:',
+    'expires:'
+  ]
+  
+  const hasRegistrationInfo = registrationIndicators.some(indicator => 
+    lowerResponse.includes(indicator)
+  )
+  
+  // If we found registration information, the domain is taken
+  if (hasRegistrationInfo) {
+    return false
+  }
+  
+  // Only check "not found" patterns if we didn't find registration info
   const availablePatterns = [
     'domain not found',
     'no match for',
@@ -127,7 +151,14 @@ export async function isDomainAvailable(domain: string): Promise<boolean> {
       }
     }
     
-    // Try WHOIS as second option
+    // Try DNS check as second option (fast and reliable)
+    try {
+      return await checkDns(cleanedDomain)
+    } catch {
+      console.log(`DNS check failed for ${domain}`)
+    }
+    
+    // Try WHOIS as third option
     try {
       return await checkWhois(cleanedDomain)
     } catch {
