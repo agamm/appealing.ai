@@ -478,13 +478,14 @@ export default function DomainGenerator() {
           placeholder="Enter domain query: example.com or (get/use)app.(com/io)"
           error={!!validation.error}
         />
-        {validation.error && <p className="text-sm text-red-500 font-light">{validation.error}</p>}
       </div>
 
       <ExamplePatterns 
         patterns={examplePatterns}
         onSelect={validateAndSetSearchTerm}
       />
+
+      {validation.error && <p className="text-sm text-red-500 font-light">{validation.error}</p>}
 
       <DomainList searchTerm={searchTerm} isValid={validation.isValid} />
       
