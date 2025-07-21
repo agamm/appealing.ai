@@ -14,6 +14,7 @@ import { useExpandMoreDomains } from "@/hooks/use-expand-more-domains"
 import { useCheckDomain } from "@/hooks/use-check-domain"
 import { useDebounce } from "@/hooks/use-debounce"
 import { useQueryState } from "nuqs"
+import { HowToSection } from "@/components/how-to-section"
 
 interface DomainResultData {
   domain: string
@@ -210,7 +211,7 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
       setVisibleCount(100)
       
       // Generate a new search ID
-      const searchId = `search-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      const searchId = `search-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`
       setCurrentSearchId(searchId)
       
       // Check daily search limit after setting domains
@@ -353,27 +354,7 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
   }
 
   if (domains.length === 0) {
-    return (
-      <div className="text-center text-gray-500 text-sm py-6 font-light space-y-3">
-        <div>Anything in <span className="text-purple-600 font-semibold">( )</span> is sent to AI to generate words:</div>
-        <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-          <div className="text-xs font-mono">
-            <div className="flex items-center justify-center gap-1 text-gray-600">
-              <span>fire</span>
-              <span className="text-purple-600 font-semibold">(animals)</span>
-              <span>.com</span>
-            </div>
-          </div>
-          <div className="text-gray-400 text-xs animate-pulse">↓</div>
-          <div className="text-xs font-mono space-y-1 text-gray-700">
-            <div>firelion.com</div>
-            <div>firetiger.com</div>
-            <div>firewolf.com</div>
-            <div className="text-gray-400">...</div>
-          </div>
-        </div>
-      </div>
-    )
+    return <HowToSection />
   }
 
   return (

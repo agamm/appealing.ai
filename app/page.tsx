@@ -7,7 +7,9 @@ export default function Page() {
     <div className="min-h-screen flex flex-col font-[family-name:var(--font-geist-sans)]">
       <main className="flex-grow flex flex-col p-8 sm:p-20">
         <div className="flex flex-col gap-8 items-center pt-20">
-          <h1 className="text-5xl font-extralight tracking-tight text-gray-900">Appealing.ai</h1>
+          <Link href="/" className="text-5xl font-extralight tracking-tight text-gray-900 hover:text-gray-700 transition-colors cursor-pointer">
+            <h1>Appealing.ai</h1>
+          </Link>
           <p className="text-gray-500 text-center max-w-md font-light text-lg">
             Ready to find a really good domain name?
           </p>
