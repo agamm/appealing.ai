@@ -100,6 +100,7 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
   const [allGeneratedDomains, setAllGeneratedDomains] = useState<Set<string>>(new Set())
   const [domainsToCheck, setDomainsToCheck] = useState<string[]>([])
   const [currentOptions, setCurrentOptions] = useState<Record<string, string[]>>({})
+  const [hasSearched, setHasSearched] = useState(false)
   const domainRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const processingDomainsRef = useRef<Set<string>>(new Set())
   const { entries, observe, unobserve } = useIntersectionObserver({ threshold: 0.5 })
@@ -209,6 +210,7 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
       setSeenAvailableDomains(new Set())
       setTryMoreLimitReached(false)
       setVisibleCount(100)
+      setHasSearched(true)
       
       // Generate a new search ID
       const searchId = `search-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`
@@ -225,6 +227,13 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
       setDomainsToCheck(visibleDomains.map(d => d.domain))
     }
   }, [expandedDomains, expandedOptions, checkDailySearchLimit, incrementDailySearches])
+
+  // Track when expansion completes with 0 results
+  useEffect(() => {
+    if (!isExpanding && !expandError && debouncedSearchTerm.trim() && extractPatterns(debouncedSearchTerm).length > 0 && isValid && expandedDomains.length === 0) {
+      setHasSearched(true)
+    }
+  }, [isExpanding, expandError, debouncedSearchTerm, expandedDomains.length, isValid])
   
   // Clear state when search term changes
   useEffect(() => {
@@ -237,6 +246,7 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
       setCurrentOptions({})
       setVisibleCount(100)
       setDomainsToCheck([])
+      setHasSearched(false)
     }
   }, [searchTerm])
 
@@ -354,6 +364,16 @@ function DomainList({ searchTerm, isValid }: { searchTerm: string; isValid: bool
   }
 
   if (domains.length === 0) {
+    if (hasSearched) {
+      return (
+        <div className="space-y-4">
+          <div className="text-center text-red-500 text-sm py-4 font-light">
+            Your query returned 0 results.
+          </div>
+          <HowToSection />
+        </div>
+      )
+    }
     return <HowToSection />
   }
 
