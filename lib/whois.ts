@@ -43,29 +43,8 @@ function getRdapUrl(tld: string): string | null {
 function isAvailableWhoisResponse(response: string): boolean {
   const lowerResponse = response.toLowerCase()
   
-  // Check if this looks like a domain registration record first
-  const registrationIndicators = [
-    'domain name:',
-    'registrar:',
-    'creation date:',
-    'created:',
-    'registry domain id:',
-    'registrant',
-    'name server',
-    'expiry date:',
-    'expires:'
-  ]
-  
-  const hasRegistrationInfo = registrationIndicators.some(indicator => 
-    lowerResponse.includes(indicator)
-  )
-  
-  // If we found registration information, the domain is taken
-  if (hasRegistrationInfo) {
-    return false
-  }
-  
-  // Only check "not found" patterns if we didn't find registration info
+  // First, check for explicit "not found" patterns - these should take precedence
+  // over any incidental mentions of registration terms in legal disclaimers
   const availablePatterns = [
     'domain not found',
     'no match for',
@@ -76,7 +55,39 @@ function isAvailableWhoisResponse(response: string): boolean {
     'domain status: no object found'
   ]
   
-  return availablePatterns.some(pattern => lowerResponse.includes(pattern))
+  const hasAvailablePattern = availablePatterns.some(pattern => lowerResponse.includes(pattern))
+  if (hasAvailablePattern) {
+    return true
+  }
+  
+  // Only if we don't have explicit "not found" patterns, check for registration info
+  // We need to be more specific about registration indicators to avoid false positives
+  // from legal disclaimers that mention "registrant" in general terms
+  const registrationIndicators = [
+    'domain name:',
+    'registrar:',
+    'creation date:',
+    'created:',
+    'registry domain id:',
+    'registrant name:',  // More specific than just "registrant"
+    'registrant organization:',  // More specific
+    'name server:',  // More specific than just "name server"
+    'name servers:',
+    'expiry date:',
+    'expires:'
+  ]
+  
+  const hasRegistrationInfo = registrationIndicators.some(indicator => 
+    lowerResponse.includes(indicator)
+  )
+  
+  // If we found specific registration information, the domain is taken
+  if (hasRegistrationInfo) {
+    return false
+  }
+  
+  // If we don't have clear indicators either way, assume taken (conservative approach)
+  return false
 }
 
 // Check domain availability using Domainr API
@@ -151,9 +162,14 @@ export async function isDomainAvailable(domain: string): Promise<boolean> {
       }
     }
     
-    // Try DNS check as second option (fast and reliable)
+    // Try DNS check as second option (only stops if definitely taken)
     try {
-      return await checkDns(cleanedDomain)
+      const dnsResult = await checkDns(cleanedDomain)
+      if (dnsResult === false) {
+        // Domain has A records, definitely taken
+        return false
+      }
+      // dnsResult is null (inconclusive), continue to WHOIS
     } catch {
       console.log(`DNS check failed for ${domain}`)
     }
