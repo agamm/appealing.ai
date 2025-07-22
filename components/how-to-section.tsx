@@ -10,12 +10,12 @@ function HowToSection() {
             <span>.com</span>
           </div>
         </div>
-        <div className="text-gray-400 text-xs animate-pulse">↓ AI generates animal words ↓</div>
+        <div className="text-gray-400 text-xs animate-pulse">↓</div>
         <div className="text-xs font-mono space-y-1 text-gray-700">
-          <div>firelion.com</div>
+          <div>firedog.com</div>
           <div>firetiger.com</div>
           <div>firewolf.com</div>
-          <div className="text-gray-400">+ many more...</div>
+          <div className="text-gray-400">...</div>
         </div>
       </div>
     </div>
