@@ -17,7 +17,7 @@ export async function generateOptionsForPattern(pattern: string): Promise<string
 
   try {
     const { object } = await generateObject({
-      model: openrouter("openai/gpt-4.1-mini:floor"),
+      model: openrouter("moonshotai/kimi-k2.5"),
       system: `Generate options for domain patterns. 
 Rules:
 - If pattern contains "/" return those exact options
@@ -63,7 +63,7 @@ export async function generateOptionsForPatternWithExclusions(pattern: string, e
 
   try {
     const { object } = await generateObject({
-      model: openrouter("openai/gpt-4.1-mini:floor"),
+      model: openrouter("moonshotai/kimi-k2.5"),
       system: `Generate NEW options for domain patterns that are DIFFERENT from the excluded list.
 Rules:
 - CRITICAL: Generate ONLY new options that are NOT in the excluded list

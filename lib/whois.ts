@@ -1,7 +1,7 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import axios from 'axios'
-import { lookup as whoisLookup } from 'whois'
+import whois from 'whois'
 import { promisify } from 'util'
 import { Semaphore } from './semaphore'
 import { checkDns } from './dns-check'
@@ -16,7 +16,7 @@ const domainrSemaphore = new Semaphore(1, 200) // 1 requests per 200ms
 let rdapServers: Array<[string[], string[]]> | null = null
 
 // Promisified whois lookup
-const whoisLookupAsync = promisify(whoisLookup) as (domain: string) => Promise<string>
+const whoisLookupAsync = promisify(whois.lookup) as (domain: string) => Promise<string>
 
 // Helper functions
 function cleanDomain(domain: string): string {
