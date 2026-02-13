@@ -6,6 +6,9 @@ const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
 })
 
+export const DEFAULT_MODEL = 'google/gemini-3-flash-preview'
+export const MODEL_DISPLAY_NAME = 'Gemini 3.0 Flash'
+
 export async function generateOptionsForPattern(pattern: string): Promise<string[]> {
   // Handle simple slash patterns first - strictly word/word/word format
   if (pattern.includes("/") && /^[a-zA-Z0-9]+(?:\/[a-zA-Z0-9]+)+$/.test(pattern.trim())) {
@@ -17,23 +20,25 @@ export async function generateOptionsForPattern(pattern: string): Promise<string
 
   try {
     const { object } = await generateObject({
-      model: openrouter("moonshotai/kimi-k2.5"),
-      system: `Generate options for domain patterns. 
-Rules:
-- If pattern contains "/" return those exact options
-- For "dictionary word" return common English words suitable for domains
-- For "with/without -" include both versions
-- Keep words lowercase
-- When pattern asks for "X words/terms" (e.g., "3 words", "10 words"), generate exactly X individual single words X>1 compound them together
-- When pattern mentions "combinations" or "compound", generate both individual words AND compound words
-- Otherwise, words/terms are usually not compound words, also they are not TLDs (.com etc.) UNLESS the pattern specifically asks for TLDs or domain extensions
-- When generating TLDs or domain extensions, return them WITHOUT the leading dot (e.g., "com", "org", "io", not ".com", ".org", ".io")
-- If user asks for play on words, return clever use of word meanings or sounds
-- When pattern asks for "words similar to <word>" return words similar to <word> but also include <word>
-- If pattern specifies a number (e.g., "10 words"), return exactly that many options
-- Otherwise return max 50 options
-- Unless constrained by pattern, return at least 5 options`,
-      prompt: `Generate options for the following pattern: ${pattern}`,
+      model: openrouter(DEFAULT_MODEL),
+      system: `You are a domain name brainstorming expert. Generate creative, brandable, and memorable domain name options.
+
+Rules for generation:
+1. SLASH PATTERNS: If pattern contains "/", return EXACTLY those options (e.g., "(word1/word2/word3)" → return [word1, word2, word3])
+2. WORD COUNTS: If pattern asks for "X words", generate exactly X individual words, not compounds
+3. COMPOUND WORDS: Only create compounds if pattern explicitly asks for "combinations", "compound", or similar
+4. DOMAIN QUALITY: Prioritize:
+   - Easy to spell and pronounce
+   - Memorable and brandable
+   - No awkward letter combinations
+   - Works well as a domain name
+5. TLDs: Return without dot (e.g., "com", "io", not ".com", ".io")
+6. DICTIONARY WORDS: Use actual English words suitable for domains when requested
+7. SPACING: No spaces or multi-word phrases - only single words
+8. WORD SIMILARITY: When asked for "similar to X", include X plus alternatives
+9. CONSTRAINTS: Respect exact counts if specified
+10. DEFAULTS: At least 5 options, max 50 unless constrained`,
+      prompt: `Generate domain name options for this pattern: ${pattern}\n\nThink about what makes a good domain name: brevity, memorability, brandability, and ease of spelling.`,
       temperature: 0.8,
       maxTokens: 256,
       schema: z.object({
@@ -63,22 +68,28 @@ export async function generateOptionsForPatternWithExclusions(pattern: string, e
 
   try {
     const { object } = await generateObject({
-      model: openrouter("moonshotai/kimi-k2.5"),
-      system: `Generate NEW options for domain patterns that are DIFFERENT from the excluded list.
-Rules:
-- CRITICAL: Generate ONLY new options that are NOT in the excluded list
-- Keep words lowercase
-- When pattern asks for "X words", generate X individual single words
-- No multi-word phrases or spaces
-- When generating TLDs or domain extensions, return them WITHOUT the leading dot (e.g., "com", "org", not ".com", ".org")
-- Focus on generating fresh, creative alternatives
-- The excluded list contains options that have ALREADY been used - DO NOT repeat them`,
-      prompt: `Generate NEW options for pattern: ${pattern}
+      model: openrouter(DEFAULT_MODEL),
+      system: `You are a domain name brainstorming expert. Generate creative, brandable, and memorable domain name options.
 
-EXCLUDED OPTIONS (DO NOT USE THESE):
+Rules for generation:
+1. NEVER REPEAT: Do NOT generate any options from the excluded list - be completely different
+2. SLASH PATTERNS: If pattern contains "/", return EXACTLY those options
+3. WORD COUNTS: If pattern asks for "X words", generate exactly X individual words
+4. DOMAIN QUALITY: Prioritize:
+   - Easy to spell and pronounce
+   - Memorable and brandable
+   - Novel and creative (especially important since previous options were exhausted)
+   - No awkward letter combinations
+5. TLDs: Return without dot (e.g., "com", "io", not ".com", ".io")
+6. SPACING: No spaces or multi-word phrases - only single words
+7. DIVERSITY: Generate alternatives with different styles/themes from excluded options
+8. CONSTRAINT: Generate at most ${Math.min(20, excludedOptions.length)} new options`,
+      prompt: `Generate completely NEW and different domain name options for: ${pattern}
+
+These options have ALREADY been used and MUST NOT be repeated:
 ${excludedOptions.join(', ')}
 
-Generate ${Math.min(20, excludedOptions.length)} NEW options that are completely different from the excluded list above.`,
+Generate fresh, creative alternatives that are distinctly different from the list above in style and meaning.`,
       temperature: 0.95, // Higher temperature for more creativity
       maxTokens: 256,
       schema: z.object({

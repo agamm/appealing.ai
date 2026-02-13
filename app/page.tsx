@@ -1,6 +1,7 @@
 import DomainGenerator from "../domain-generator"
 import Link from "next/link"
 import { Suspense } from "react"
+import { MODEL_DISPLAY_NAME } from "@/lib/generate-options"
 
 export default function Page() {
   return (
@@ -10,6 +11,9 @@ export default function Page() {
           <Link href="/" className="text-5xl font-extralight tracking-tight text-gray-900 hover:text-gray-700 transition-colors cursor-pointer">
             <h1>Appealing.ai</h1>
           </Link>
+          <p className="text-gray-400 text-center text-sm font-light">
+            {MODEL_DISPLAY_NAME}
+          </p>
           <p className="text-gray-500 text-center max-w-md font-light text-lg">
             Ready to find a really good domain name?
           </p>
