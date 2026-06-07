@@ -42,9 +42,16 @@ const faqItems: FAQItem[] = [
   {
     question: "How accurate is the availability checking?",
     answer: (
-      <div className="space-y-2">
-        <p>We use multiple domain registrar APIs to check availability in real-time. While we strive for accuracy, there might be slight delays or differences between our check and the actual registration.</p>
-        <p>Always verify availability with your chosen registrar before making a purchase decision.</p>
+      <div className="space-y-3">
+        <p>Each domain is checked live through a chain of sources, stopping at the first conclusive answer:</p>
+        <ol className="list-decimal list-inside space-y-1 text-sm">
+          <li><span className="font-medium">RDAP</span> — the registries&apos; official registration-data protocol. A <code className="text-xs">404</code> means the domain isn&apos;t registered. Covers most modern TLDs.</li>
+          <li><span className="font-medium">DNS</span> — if the domain resolves to an IP, it&apos;s definitely taken (even when RDAP is unavailable).</li>
+          <li><span className="font-medium">WHOIS</span> — a text lookup parsed for &quot;not found&quot; vs. active registration records.</li>
+          <li><span className="font-medium">Domainr API</span> — an optional final fallback for TLDs the above don&apos;t cover (only if a key is configured).</li>
+        </ol>
+        <p>If every source errors or is inconclusive, the domain is shown as <span className="font-medium">taken</span> — we&apos;d rather hide a long shot than show you a &quot;free&quot; domain that isn&apos;t. So a green &quot;available&quot; is high-confidence, but registry caches and pending registrations mean it&apos;s not a guarantee.</p>
+        <p>Always confirm at your registrar&apos;s checkout before buying.</p>
       </div>
     )
   },
